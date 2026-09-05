@@ -81,6 +81,10 @@ See the [architecture and Apple API references](Docs/ARCHITECTURE.md) and [test 
 
 Text selection and text search require a PDF text layer; this release does not perform OCR. Image-only pages support location markers. The app respects PDF commenting, printing, and copying permissions. Flattened exports retain vector/text content where PDFKit's renderer supports it; interactive forms, links, and annotation popovers are intentionally flattened for sharing. Very large PDFs and accessibility behavior beyond the tested paths remain areas for broader real-world validation.
 
+## Security
+
+See the [security policy](SECURITY.md) for supported versions and how to [report a vulnerability privately](https://github.com/mweingartner/annotate/security/advisories/new).
+
 ## License
 
 Annotate is available under the [MIT License](LICENSE).
