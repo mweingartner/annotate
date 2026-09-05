@@ -8,7 +8,7 @@
 - Ad-hoc code signature passed `codesign --verify --deep --strict`.
 - Installed executable and release-build executable have identical SHA-256:
   `ddf1e176977da7974aac2338ba81689031a56c183eebbd9b5f6ca520dd68a3dc`.
-- Local repository initialized on `main`; no remote repository or remote push configured.
+- At this original build checkpoint, the local repository was initialized on `main` without a remote. The project was subsequently prepared for public publication at [mweingartner/annotate](https://github.com/mweingartner/annotate) under the MIT License.
 - The awake-session guard used for UI testing was stopped after the installed-app checks.
 
 ## Automated evidence
