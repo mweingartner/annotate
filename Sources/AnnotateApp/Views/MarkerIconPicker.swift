@@ -12,6 +12,12 @@ struct MarkerIconPicker: View {
                     MarkerIconButton(option: option, selected: draft.icon == option.symbol, action: { draft.icon = option.symbol })
                 }
             }
+            if let selectedOption = MarkerIconOption.all.first(where: { $0.symbol == draft.icon }) {
+                Text("Selected: \(selectedOption.name)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Margin icon picker")

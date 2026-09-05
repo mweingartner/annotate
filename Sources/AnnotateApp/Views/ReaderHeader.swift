@@ -41,6 +41,8 @@ struct ReaderHeader: View {
 
                 Button("Mark page", systemImage: "bookmark.badge.plus", action: model.beginPageMarker)
                     .buttonStyle(.borderedProminent)
+                    .tint(ReaderStyle.actionFill)
+                    .foregroundStyle(.white)
                     .disabled(!model.canEdit)
                     .help("Add a marker to the current page; select text for a passage marker")
             }

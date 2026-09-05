@@ -1,4 +1,6 @@
-# Verification — September 5, 2026
+# Original 1.0.0 verification — September 5, 2026
+
+The current 1.0.1 release is documented in the [polish verification report](POLISH_VERIFICATION.md). This page retains the original build evidence.
 
 ## Delivered artifact
 

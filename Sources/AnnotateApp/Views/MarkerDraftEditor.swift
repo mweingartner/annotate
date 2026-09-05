@@ -2,6 +2,7 @@ import SwiftUI
 import AnnotateCore
 
 struct MarkerDraftEditor: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     @Bindable var draft: MarkerDraft
 
     var body: some View {
@@ -52,7 +53,7 @@ struct MarkerDraftEditor: View {
                         .textFieldStyle(.plain)
                         .padding(12)
                         .background(.background, in: .rect(cornerRadius: 9))
-                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(.primary.opacity(0.12), lineWidth: 1) }
+                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1) }
                         .accessibilityLabel("Annotation note")
                 }
 
@@ -64,7 +65,7 @@ struct MarkerDraftEditor: View {
                         .textFieldStyle(.plain)
                         .padding(12)
                         .background(.background, in: .rect(cornerRadius: 9))
-                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(.primary.opacity(0.12), lineWidth: 1) }
+                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1) }
                         .accessibilityLabel("Annotation question")
                 }
 

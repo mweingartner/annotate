@@ -11,6 +11,7 @@ Annotate brings important passages, revisit lists, questions, and notes into one
 ## Features
 
 - **Mark a passage in place.** Selecting text opens a slide-out editor with categories, highlight colors, a custom color picker, and marker icons.
+- **Read notes at a glance.** Click a note tag or margin icon for a readable details panel, with full notes, questions, and selected text. Edit from the panel without losing your place.
 - **Keep related thoughts together.** A passage can be Important and Revisit at the same time, with both a note and a question attached.
 - **Return to the exact spot.** Browse category lists, click any marker, or step through the current list with next/previous shortcuts. Location markers also work on image-only pages.
 - **Search with context.** A slide-out search panel shows a clickable snippet for each occurrence.
@@ -48,7 +49,7 @@ The application and test harness are Swift. The small build script assembles and
 
 Annotate uses the native macOS document system, including autosave, save dialogs, multiple document windows, and undo/redo for marker changes. Opened PDFs autosave in place; use **Save As** first to work on a separate editable copy. Marker metadata lives inside standard PDF annotations, so the editable document does not depend on sidecar files or an app database. Changes still in the annotation panel must be added with Save Marker; closing a document with changed draft fields asks what to do.
 
-**Save** retains editable highlights and marker metadata. Other PDF viewers can display the highlights and printable symbol badges. Notes and questions are also stored in the highlight annotation's contents. Software that removes custom PDF annotation keys may remove Annotate's category/navigation metadata.
+**Save** retains editable highlights and marker metadata. Other PDF viewers can display the highlights and printable symbol badges. Notes and questions are also stored in standard PDF comment annotations. Annotate updates its older marker appearances when opening an editable document; saving preserves the updated tags. Software that removes custom PDF annotation keys may remove Annotate's category/navigation metadata.
 
 **Export Annotated PDF** makes a separate sharing copy: visible annotations are drawn permanently into page content, and a paginated annotation index contains the complete passages, notes, questions, and original page references. This copy contains no interactive annotation objects. Keep the editable original to make future changes. Export requires a PDF that allows printing and copying.
 
@@ -72,7 +73,7 @@ Annotate uses the native macOS document system, including autosave, save dialogs
 
 ## Testing and implementation
 
-The test harness uses real PDFKit documents and generated fixtures to exercise marker persistence, multi-page selections, category membership, attached writing, undo/redo, malformed metadata, search, PDF permissions, document lifecycle, and flattened export. The recorded verification run passed **35 test functions covering 52 scenarios**; its scope and remaining gaps are documented in the [verification report](Docs/VERIFICATION.md).
+The test harness uses real PDFKit documents and generated fixtures to exercise marker persistence, multi-page selections, category membership, attached writing, undo/redo, malformed metadata, search, PDF permissions, document lifecycle, and flattened export. The recorded verification run passed **57 test functions covering 137 scenarios**; its scope and remaining gaps are documented in the [polish verification report](Docs/POLISH_VERIFICATION.md).
 
 See the [architecture and Apple API references](Docs/ARCHITECTURE.md) and [test plan](Docs/TEST_PLAN.md) for implementation details and reproducible checks. The architecture and testing documentation reference **10 distinct original Apple sources**.
 

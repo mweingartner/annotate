@@ -2,6 +2,7 @@ import SwiftUI
 import AnnotateCore
 
 struct MarkerFilterButton: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let filter: MarkerFilter
     let count: Int
     let selected: Bool
@@ -24,12 +25,13 @@ struct MarkerFilterButton: View {
             .background(selected ? ReaderStyle.accent.opacity(0.13) : Color.clear, in: .rect(cornerRadius: 8))
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(selected ? ReaderStyle.accent.opacity(0.6) : Color.primary.opacity(0.09), lineWidth: 1)
+                    .stroke(ReaderStyle.outline(selected: selected, contrast: contrast), lineWidth: selected ? 2 : 1)
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(filter.title), \(count) markers")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

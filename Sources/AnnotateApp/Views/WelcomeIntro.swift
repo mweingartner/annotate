@@ -31,6 +31,8 @@ struct WelcomeIntro: View {
             HStack(spacing: 12) {
                 Button("Open a PDF…", systemImage: "folder", action: model.openDocument)
                     .buttonStyle(.borderedProminent)
+                    .tint(ReaderStyle.actionFill)
+                    .foregroundStyle(.white)
                     .controlSize(.large)
                 Button("Explore a sample", action: model.openSample)
                     .buttonStyle(.bordered)

@@ -42,6 +42,25 @@ public struct MarkerColor: Codable, Equatable, Hashable, Sendable {
         NSColor(srgbRed: Self.normalized(red), green: Self.normalized(green), blue: Self.normalized(blue), alpha: 1)
     }
 
+    /// Chooses the higher-contrast ink for an opaque swatch of this sRGB color.
+    /// WCAG's relative-luminance formula gives black or white at least 4.5:1 contrast.
+    /// https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
+    public var usesDarkInk: Bool {
+        func linear(_ component: Double) -> Double {
+            let value = Self.normalized(component)
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        let blackContrast = (luminance + 0.05) / 0.05
+        let whiteContrast = 1.05 / (luminance + 0.05)
+        return blackContrast >= whiteContrast
+    }
+
+    public var readableInkColor: NSColor {
+        let component = usesDarkInk ? 0.0 : 1.0
+        return NSColor(srgbRed: component, green: component, blue: component, alpha: 1)
+    }
+
     public static let palette: [MarkerColor] = [
         .init(red: 1, green: 0.79, blue: 0.20),
         .init(red: 0.44, green: 0.79, blue: 0.53),

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SearchResultRow: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let hit: SearchHit
     let jump: () -> Void
 
@@ -20,7 +21,7 @@ struct SearchResultRow: View {
             .background(.background, in: .rect(cornerRadius: ReaderStyle.radius))
             .overlay {
                 RoundedRectangle(cornerRadius: ReaderStyle.radius)
-                    .stroke(.primary.opacity(0.08), lineWidth: 1)
+                    .stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1)
             }
             .contentShape(.rect)
         }

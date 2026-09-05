@@ -2,6 +2,7 @@ import SwiftUI
 import AnnotateCore
 
 struct MarkerRow: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let marker: PDFMarker
     let selected: Bool
     let jump: () -> Void
@@ -20,9 +21,13 @@ struct MarkerRow: View {
                     HStack(alignment: .center) {
                         Image(systemName: marker.icon)
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color(nsColor: marker.color.readableInkColor))
                             .frame(width: 29, height: 29)
-                            .background(Color(nsColor: marker.color.nsColor).opacity(0.55), in: .rect(cornerRadius: 7))
+                            .background(Color(nsColor: marker.color.nsColor), in: .rect(cornerRadius: 7))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 7)
+                                    .stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1)
+                            }
                             .accessibilityHidden(true)
                         HStack(spacing: 5) {
                             ForEach(orderedCategories, id: \.self) { category in
@@ -84,7 +89,7 @@ struct MarkerRow: View {
         .background(selected ? ReaderStyle.accent.opacity(0.07) : Color(nsColor: .controlBackgroundColor), in: .rect(cornerRadius: ReaderStyle.radius))
         .overlay {
             RoundedRectangle(cornerRadius: ReaderStyle.radius)
-                .stroke(selected ? ReaderStyle.accent.opacity(0.7) : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1)
+                .stroke(ReaderStyle.outline(selected: selected, contrast: contrast), lineWidth: selected ? 2 : 1)
         }
         .contextMenu {
             Button("Go to passage", systemImage: "arrow.turn.down.right", action: jump)

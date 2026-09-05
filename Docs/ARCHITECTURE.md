@@ -6,7 +6,7 @@ The reading surface stays central. A leading, resizable panel switches between c
 
 AppKit `NSDocument` manages document windows, file opening, saving, autosave, dirty state, and undo. `ReaderModel` coordinates the live PDF and SwiftUI state on the main actor. Disk reads use isolated byte storage until the window initializes. Search is debounced, cancellable, and cooperatively yields between PDF pages. All PDF objects belonging to the reader remain on the main actor.
 
-Marker values use versioned, bounded Codable metadata in a custom PDF annotation key. Each selected line has its own highlight rectangle; a standard FreeText annotation carries a printable symbol. A private owner tag and UUID associate the annotations belonging to one marker. Applying a replacement validates and constructs the new annotations before deleting the old ones. Deletion only touches annotations owned by that marker. Loading treats all PDF metadata as untrusted and ignores invalid/unsupported entries without deleting their visible PDF annotations.
+Marker values use versioned, bounded Codable metadata in a custom PDF annotation key. Each selected line has its own highlight rectangle; a standard FreeText annotation carries a printable symbol, and an owned Text/comment annotation carries the full human-readable note and question. Highlights have empty standard contents to avoid PDFKit synthesizing comment controls outside their hit bounds. A private owner tag and UUID associate the annotations belonging to one marker. Applying a replacement validates and constructs the new annotations before deleting the old ones. Deletion only touches annotations owned by that marker. Loading treats all PDF metadata as untrusted and ignores invalid/unsupported entries without deleting their visible PDF annotations.
 
 Flattening draws PDF pages and visible annotations into a fresh Core Graphics PDF context. Core Text paginates a complete annotation index, including arbitrarily long text within the validated per-marker storage limits. Export verifies that the resulting PDF contains no annotation objects. It does not overwrite the currently open editable PDF.
 
@@ -31,3 +31,9 @@ Eight original Apple documentation sources inform the implementation; installed 
 - `Tests`: executable behavioral tests with generated, deterministic PDF fixtures.
 - `Resources`: app metadata and icon.
 - `Scripts`: reproducible build and icon generation.
+
+## Note details and contrast
+
+`SelectionPDFView.hitTest` routes only Annotate-owned comment tags and margin badges to its mouse handlers. Highlights, ordinary page text, foreign annotations, links, and forms stay with PDFKit. A tag click opens a SwiftUI details view in a transient NSPopover; dragging a tag or releasing elsewhere cancels the click. The panel uses semantic text and background colors, separately labeled note/question/passage sections, bounded scrolling, and an explicit Edit action. Editing resolves the current marker by UUID; marker mutations and document replacement dismiss stale details. Changed drafts disable the edit action.
+
+Marker glyphs and swatch checkmarks choose black or white according to sRGB relative luminance. Printable badges use opaque fills so contrast does not depend on the PDF underneath. Teal controls adapt to light/dark appearance, and stronger selected outlines respond to Increase Contrast. Search results emphasize matches with bold semantic text.

@@ -64,13 +64,14 @@ public enum MarkerCodec {
         guard data.count <= maximumMetadataBytes, let payload = String(data: data, encoding: .utf8) else {
             throw AnnotateError.metadataTooLarge
         }
-        let contents = readableContents(for: marker)
         var prepared: [(PDFPage, PDFAnnotation)] = []
         for (index, region) in marker.regions.enumerated() {
             guard let page = document.page(at: region.pageIndex) else { throw AnnotateError.invalidPage(region.pageIndex) }
             let highlight = PDFAnnotation(bounds: region.bounds, forType: .highlight, withProperties: nil)
             highlight.color = marker.color.nsColor.withAlphaComponent(0.35)
-            highlight.contents = index == 0 ? contents : "Annotate · " + MarkerCategory.allCases.filter { marker.categories.contains($0) }.map(\.title).joined(separator: " · ")
+            // Contents on a highlight make PDFKit synthesize an unaddressable comment
+            // icon outside its bounds. A separate owned Text annotation carries them.
+            highlight.contents = nil
             highlight.shouldDisplay = true
             highlight.shouldPrint = true
             highlight.userName = "Annotate"
@@ -89,8 +90,9 @@ public enum MarkerCodec {
             let badge = PDFAnnotation(bounds: CGRect(x: x, y: y, width: size, height: size), forType: .freeText, withProperties: nil)
             badge.contents = iconGlyph(for: marker.icon)
             badge.font = NSFont.systemFont(ofSize: max(5, size - 4), weight: .bold)
-            badge.fontColor = NSColor.black
-            badge.color = marker.color.nsColor.withAlphaComponent(0.9)
+            badge.fontColor = marker.color.readableInkColor
+            // A solid fill keeps the ink contrast stable over colored PDF content.
+            badge.color = marker.color.nsColor
             badge.alignment = .center
             let border = PDFBorder()
             border.lineWidth = 0
@@ -100,6 +102,9 @@ public enum MarkerCodec {
             badge.userName = "Annotate"
             try identify(badge, marker: marker, payload: nil)
             prepared.append((page, badge))
+            let comment = try commentTag(for: marker, on: page)
+            prepared.append((page, comment.tag))
+            prepared.append((page, comment.popup))
         }
         // Do not remove an existing marker until all validation and allocation succeeds.
         remove(id: marker.id, from: document)
@@ -110,8 +115,47 @@ public enum MarkerCodec {
         guard !document.isLocked, document.allowsCommenting else { return }
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
-            for annotation in page.annotations where owns(annotation, id: id) {
+            let annotations = page.annotations.filter { owns($0, id: id) }
+            // Detach in-memory popup links before removing their parent. Otherwise
+            // PDFKit can reinsert a companion while serializing the removed parent.
+            for annotation in annotations where annotation.type != "Popup" { annotation.popup = nil }
+            for annotation in annotations {
                 page.removeAnnotation(annotation)
+            }
+        }
+    }
+
+    /// Repairs older Annotate appearances without rewriting marker metadata or identifiers.
+    /// Normal document saving persists the updated appearance; restricted PDFs are left intact.
+    public static func refreshAppearance(in document: PDFDocument) {
+        guard !document.isLocked, document.allowsCommenting else { return }
+        for marker in markers(in: document) {
+            guard let page = document.page(at: marker.pageIndex) else { continue }
+            let comments = page.annotations.filter { $0.type == "Text" && owns($0, id: marker.id) }
+            let popups = page.annotations.filter { $0.type == "Popup" && owns($0, id: marker.id) }
+            // Prepare the replacement comment before removing legacy highlight contents.
+            guard let prepared = try? commentTag(for: marker, on: page) else { continue }
+            let popup = popups.first ?? prepared.popup
+            if comments.isEmpty {
+                prepared.tag.popup = popup
+                page.addAnnotation(prepared.tag)
+            } else {
+                for comment in comments {
+                    comment.bounds = prepared.tag.bounds
+                    comment.color = prepared.tag.color
+                    comment.popup = popup
+                }
+            }
+            if popups.isEmpty { page.addAnnotation(popup) }
+            for badge in page.annotations where badge.type == "FreeText" && owns(badge, id: marker.id) {
+                badge.fontColor = marker.color.readableInkColor
+                badge.color = marker.color.nsColor
+            }
+            for pageIndex in Set(marker.regions.map(\.pageIndex)) {
+                guard let markedPage = document.page(at: pageIndex) else { continue }
+                for highlight in markedPage.annotations where highlight.type == "Highlight" && owns(highlight, id: marker.id) {
+                    highlight.contents = nil
+                }
             }
         }
     }
@@ -173,6 +217,40 @@ public enum MarkerCodec {
         if let payload, !annotation.setValue(payload, forAnnotationKey: metadataKey) {
             throw AnnotateError.annotationWriteFailed
         }
+    }
+
+    private static func commentTag(for marker: PDFMarker, on page: PDFPage) throws -> (tag: PDFAnnotation, popup: PDFAnnotation) {
+        guard let first = marker.regions.first else { throw AnnotateError.invalidMarker("choose a location.") }
+        let transform = page.transform(for: .cropBox)
+        let crop = page.bounds(for: .cropBox).applying(transform)
+        let passage = first.bounds.applying(transform)
+        // PDFKit normalizes standard Text/comment icons to 24 points when saved.
+        // Use that size up front so reopening does not expand them over the passage.
+        let size = min(24.0, min(crop.width, crop.height))
+        let x = min(max(crop.minX, passage.maxX + 3), crop.maxX - size)
+        let y = min(max(crop.minY, passage.maxY + 3), crop.maxY - size)
+        let bounds = CGRect(x: x, y: y, width: size, height: size).applying(transform.inverted())
+        let tag = PDFAnnotation(bounds: bounds, forType: .text, withProperties: nil)
+        tag.iconType = .comment
+        tag.contents = readableContents(for: marker)
+        // PDFKit draws the standard comment glyph in dark ink. A pale category tint
+        // keeps that glyph readable even when the marker itself uses a dark color.
+        tag.color = NSColor(srgbRed: 0.75 + marker.color.red * 0.25,
+                            green: 0.75 + marker.color.green * 0.25,
+                            blue: 0.75 + marker.color.blue * 0.25, alpha: 1)
+        tag.shouldDisplay = true
+        tag.shouldPrint = true
+        tag.userName = "Annotate"
+        tag.modificationDate = Date()
+        try identify(tag, marker: marker, payload: nil)
+        // PDFKit does not automatically delete a serialized Text annotation's Popup.
+        // Give both parts ownership so replacing or deleting a marker removes both.
+        let popup = PDFAnnotation(bounds: CGRect(x: bounds.maxX + 7, y: bounds.minY, width: 240, height: 140), forType: .popup, withProperties: nil)
+        popup.isOpen = false
+        popup.shouldPrint = false
+        try identify(popup, marker: marker, payload: nil)
+        tag.popup = popup
+        return (tag, popup)
     }
 
     private static func owns(_ annotation: PDFAnnotation, id: UUID) -> Bool {

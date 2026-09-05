@@ -41,6 +41,7 @@ final class ReaderModel {
     func load(_ document: PDFDocument, owner: AnnotateDocument) {
         self.owner = owner
         pdfDocument = document
+        MarkerCodec.refreshAppearance(in: document)
         markers = MarkerCodec.markers(in: document)
         pageCount = document.pageCount
         fileName = owner.displayName ?? "Untitled PDF"
@@ -150,6 +151,7 @@ final class ReaderModel {
         } catch { errorMessage = error.localizedDescription }
     }
     private func refreshMarkers() {
+        pdfView?.closeAnnotationPopover()
         guard let document = pdfDocument else { return }
         markers = MarkerCodec.markers(in: document)
         pdfView?.documentView?.needsDisplay = true
@@ -214,7 +216,6 @@ final class ReaderModel {
                             var snippet = AttributedString((start > 0 ? "…" : "") + context + (end < nsText.length ? "…" : ""))
                             if let range = snippet.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
                                 snippet[range].font = .body.bold()
-                                snippet[range].foregroundColor = .accentColor
                             }
                             self.searchResults.append(SearchHit(pageIndex: pageIndex, snippet: snippet, selection: selection))
                         }

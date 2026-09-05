@@ -2,6 +2,7 @@ import SwiftUI
 import AnnotateCore
 
 struct MarkerSidebar: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     @Bindable var model: ReaderModel
     @FocusState private var searchFocused: Bool
 
@@ -45,7 +46,7 @@ struct MarkerSidebar: View {
                 .background(.background, in: .rect(cornerRadius: 9))
                 .overlay {
                     RoundedRectangle(cornerRadius: 9)
-                        .stroke(searchFocused ? ReaderStyle.accent : Color.primary.opacity(0.12), lineWidth: searchFocused ? 2 : 1)
+                        .stroke(ReaderStyle.outline(selected: searchFocused, contrast: contrast), lineWidth: searchFocused ? 2 : 1)
                 }
 
                 if !isShowingSearch {

@@ -2,7 +2,7 @@
 
 ## Recorded automated result
 
-`swift test` passed on September 5, 2026: **35 test functions in five suites, covering 52 scenarios** when parameterized cases are counted separately. The two targets reported 23 core tests and 12 app tests. The build emitted no compiler warnings. Execution used Apple Swift 6.4 on macOS 27.0 (26A5425a), Apple silicon, with a macOS 26 deployment target.
+`swift test` passed on September 5, 2026: **57 test functions in ten suites, covering 137 scenarios** when parameterized cases are counted separately. The two targets reported 33 core tests and 24 app tests. The build emitted no compiler warnings. Execution used Apple Swift 6.4 on macOS 27.0 (26A5425a), Apple silicon, with a macOS 26 deployment target.
 
 These are real PDFKit, CoreGraphics, CoreText, AppKit and document-model tests, without third-party dependencies or mocked PDF rendering. The document lifecycle test creates and closes an offscreen native reader window. The invalid-input test deliberately passes non-PDF bytes; CoreGraphics may log a PDF parser diagnostic while the test verifies a clean error.
 
@@ -77,3 +77,15 @@ Three Apple primary references informed the verification boundaries. Runtime ass
 1. [PDFSelection](https://developer.apple.com/documentation/pdfkit/pdfselection) — selections can be contiguous or noncontiguous; per-line selections and per-page bounds support exact passage geometry.
 2. [PDFPage.draw(with:to:)](https://developer.apple.com/documentation/pdfkit/pdfpage/draw%28with%3Ato%3A%29) — native page rendering into the export graphics context. Render equivalence and the absence of annotation dictionaries are tested independently.
 3. [PDFDocument.accessPermissions](https://developer.apple.com/documentation/pdfkit/pdfdocument/accesspermissions) — the native permission boundary. The harness writes an encrypted test PDF and verifies the actual printing, copying and commenting restrictions after reader-password unlock.
+
+## Note panel and readability regressions (1.0.1)
+
+- Real PDF hit targets: two marker identities, four rotations and three zoom levels; owned comment tags/badges receive clicks, while highlights and unmarked text remain in PDFKit's selection view.
+- Foreign comments, links, forms, overlapping annotations, malformed ownership and modified clicks retain native handling. Tag drags and releases outside/on another marker cancel the click.
+- Legacy appearance migration preserves metadata and foreign annotations, is idempotent, and respects PDF commenting permissions. Explicit comment tags remain above/right after PDFKit save/reopen normalization.
+- Five comment update/save/reopen cycles and final deletion do not accumulate owned popup companions or remove foreign ones.
+- Black/white marker ink has at least 4.5:1 contrast for all presets, dark/custom cases, 1,331 sampled RGB colors and 256 grays; actual saved and flattened PDF raster pixels verify the ink and background.
+- Accent colors are checked against light/dark and increased-contrast native backgrounds; the action fill's white label contrast exceeds 7:1.
+- An 80-paragraph note remains in a bounded, fully scrollable popover in light and dark appearance. Delete and Undo dismiss captured details rather than leaving stale editable content.
+
+See [the 1.0.1 report](POLISH_VERIFICATION.md) for observed installed-app checks and remaining limits.

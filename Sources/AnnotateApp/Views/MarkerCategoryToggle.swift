@@ -2,6 +2,7 @@ import SwiftUI
 import AnnotateCore
 
 struct MarkerCategoryToggle: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     @Bindable var draft: MarkerDraft
     let category: MarkerCategory
 
@@ -25,7 +26,7 @@ struct MarkerCategoryToggle: View {
             .background(selected ? ReaderStyle.accent.opacity(0.1) : Color(nsColor: .controlBackgroundColor), in: .rect(cornerRadius: 9))
             .overlay {
                 RoundedRectangle(cornerRadius: 9)
-                    .stroke(selected ? ReaderStyle.accent.opacity(0.6) : Color.primary.opacity(0.12), lineWidth: 1)
+                    .stroke(ReaderStyle.outline(selected: selected, contrast: contrast), lineWidth: selected ? 2 : 1)
             }
             .contentShape(.rect)
         }

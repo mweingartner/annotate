@@ -34,6 +34,8 @@ struct MarkerInspector: View {
                     Spacer()
                     Button(draft.isEditing ? "Save changes" : "Add marker", systemImage: draft.isEditing ? "checkmark" : "plus", action: model.saveDraft)
                         .buttonStyle(.borderedProminent)
+                        .tint(ReaderStyle.actionFill)
+                        .foregroundStyle(.white)
                         .keyboardShortcut(.return, modifiers: .command)
                         .disabled(!model.canEdit)
                         .help("Save this annotation (⌘Return)")
