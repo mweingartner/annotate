@@ -1,10 +1,12 @@
 # Annotate verification plan
 
-## Recorded automated result
+## Recorded original-reader baseline
 
 `swift test` passed on September 5, 2026: **57 test functions in ten suites, covering 137 scenarios** when parameterized cases are counted separately. The two targets reported 33 core tests and 24 app tests. The build emitted no compiler warnings. Execution used Apple Swift 6.4 on macOS 27.0 (26A5425a), Apple silicon, with a macOS 26 deployment target.
 
 These are real PDFKit, CoreGraphics, CoreText, AppKit and document-model tests, without third-party dependencies or mocked PDF rendering. The document lifecycle test creates and closes an offscreen native reader window. The invalid-input test deliberately passes non-PDF bytes; CoreGraphics may log a PDF parser diagnostic while the test verifies a clean error.
+
+This is the original reader baseline. Current workspace, native text, and assistant results are recorded separately in [WORKSPACE_VERIFICATION.md](WORKSPACE_VERIFICATION.md).
 
 Run from the project directory:
 
@@ -89,3 +91,15 @@ Three Apple primary references informed the verification boundaries. Runtime ass
 - An 80-paragraph note remains in a bounded, fully scrollable popover in light and dark appearance. Delete and Undo dismiss captured details rather than leaving stale editable content.
 
 See [the 1.0.1 report](POLISH_VERIFICATION.md) for observed installed-app checks and remaining limits.
+
+## Version 2 workspace regression
+
+Run `swift test` from the repository root. New suites cover full snapshot undo/redo and failed-operation rollback; native source-glyph removal and embedded replacement text surviving save/reopen; unchanged neighboring text coordinates, vector operators, annotations and shared-form invocations; actual installed font families/typefaces and mixed-run style preservation; selection synchronization without dirtying the PDF; invalid geometry/font input, overflow, fit-height and unapplied-edit recovery; and rotated/cropped live editor placement at multiple zoom levels. Marker actions also verify opening the editor from workspace tools, protecting unsaved drafts and unapplied native text, complete deletion undo, and accurate multi-page descriptions.
+
+Other workspace suites cover actual redaction bitmap removal and absence of source text/metadata; page remapping, merge collisions, extraction/splitting; standard form widgets and electronic signature pixel persistence; native conversion roundtrips, OpenXML ZIP/XML validity and whole-document OCR; batch collision/failure isolation; and document-assistant provider contracts, context completeness, cancellation, source isolation, and bounded transport. Assistant interaction tests distinguish one-action local completion from mandatory cloud preparation/review, plus source-only recovery when no local model is available.
+
+For installed-app acceptance, use a disposable generated PDF. Save it under one intentional `.pdf` name. Select original PDF text and replace it on the page, format a subset using installed font family, size, color, bold and italic, then confirm neighboring source text remains selectable. Move/resize the replacement, recover from overflow, save/reopen and verify both its appearance and searchable text. Exercise a page operation plus undo, form creation/filling, a nonbinding test signature, conversion/OCR, redaction output, one-action local Ollama generation with source links, cloud preparation without sending, and original marker/tag/search/navigation. From another tool, open a saved marker, change combined categories, and undo its deletion. Reopen the exact saved PDF and visually inspect exported copies in Preview. Record source/runtime limitations separately; transport fixtures do not prove a paid provider account works. Current results are in [WORKSPACE_VERIFICATION.md](WORKSPACE_VERIFICATION.md).
+
+## Version 2 release result
+
+The final default run passed 250 functions / 431 expanded scenarios across the core and app suites, with the opt-in Ollama test skipped by default. Enabling that test separately passed its real local request, exercising all 251 functions. See [WORKSPACE_VERIFICATION.md](WORKSPACE_VERIFICATION.md) for exact environment, commands/logs, installed-application evidence, and limitations.

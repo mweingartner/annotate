@@ -13,8 +13,8 @@ struct MarkerListPanel: View {
                      ? "Select text to capture a passage, or mark the current page. Your thoughts will be waiting here."
                      : "Markers in this category will appear here. A passage can belong to more than one category.")
             } actions: {
-                Button("Mark this page", systemImage: "bookmark.badge.plus", action: model.beginPageMarker)
-                    .disabled(!model.canEdit)
+                Button("Mark this page", systemImage: "bookmark.badge.plus", action: model.markCurrentPageFromWorkspace)
+                    .disabled(!model.canEdit || model.isProcessing)
             }
             .frame(maxHeight: .infinity)
         } else {
@@ -34,7 +34,9 @@ struct MarkerListPanel: View {
 
                     ForEach(model.filteredMarkers) { marker in
                         MarkerRow(marker: marker, selected: model.selectedMarkerID == marker.id,
-                                  jump: { model.jump(to: marker) }, edit: { model.edit(marker) }, delete: { model.delete(marker) }, canEdit: model.canEdit)
+                                  jump: { model.jump(to: marker) }, edit: { model.openMarkerEditor(marker) },
+                                  delete: { model.removeMarkerFromReader(marker) },
+                                  canEdit: model.canEdit && !model.isProcessing && !model.hasDraftChanges)
                     }
                 }
                 .padding(ReaderStyle.panelPadding)

@@ -1,26 +1,31 @@
 # Annotate
 
-A native macOS PDF reader for thoughtful reading. Select a passage, keep what matters, and return to the exact place later.
+A native macOS PDF workspace for reading, live text editing, page organization, forms, signatures, conversion, OCR, and document conversations.
 
-![Annotate showing its built-in reading guide, passage markers, and annotation panel](Docs/Images/annotate-hero.jpg)
+![Annotate's reading guide and original marker workflow](Docs/Images/annotate-hero.jpg)
 
-*The Annotate app, with its built-in reading guide.*
+*The original reading and marker surface; version 2 adds a document workspace toolbar and tool panels.*
 
-Annotate brings important passages, revisit lists, questions, and notes into one reading workflow. Built entirely in Swift using Apple's SwiftUI, AppKit, PDFKit, Core Graphics, and Core Text, with native macOS controls and Liquid Glass accents. No third-party dependencies, accounts, cloud services, or network requests.
+Annotate is written in Swift using Apple's SwiftUI, AppKit, PDFKit, Core Graphics, Core Text, Vision, FoundationModels, and Security frameworks. It has no third-party runtime dependencies, ads, account requirement, or export watermarks. PDF tools run locally. AI can use **local Ollama**, **OpenAI API**, **Claude API**, or **Apple Intelligence** when available.
 
-## Features
+## Work with PDFs
 
-- **Mark a passage in place.** Selecting text opens a slide-out editor with categories, highlight colors, a custom color picker, and marker icons.
-- **Read notes at a glance.** Click a note tag or margin icon for a readable details panel, with full notes, questions, and selected text. Edit from the panel without losing your place.
-- **Keep related thoughts together.** A passage can be Important and Revisit at the same time, with both a note and a question attached.
-- **Return to the exact spot.** Browse category lists, click any marker, or step through the current list with next/previous shortcuts. Location markers also work on image-only pages.
-- **Search with context.** A slide-out search panel shows a clickable snippet for each occurrence.
-- **Keep your work in the PDF.** Editable markers travel inside the document, with native autosave, multiple windows, and undo/redo.
-- **Print and share.** Print visible annotations or export a PDF with marks baked into its pages and a complete notes-and-questions index.
+| Tool | What it does |
+| --- | --- |
+| Read and mark | Composable Important, Revisit, Question, and Note markers; custom colors/icons; exact passage navigation; contextual search; readable note popovers. |
+| Edit | Edit selectable PDF text directly on the page or in the rich side panel. Change installed font family/typeface, size, color, bold, italic, underline, alignment, letter/line/paragraph spacing, position, and dimensions for selected text runs. Select existing images to replace, remove, move, or resize their source content. Insert native text or images; add standard highlights, underlines, strikeouts, rectangles, and ellipses. |
+| Pages | Thumbnail navigation and drag reordering; accessible move buttons; insert PDFs, images, and blank pages; merge, rotate, delete, extract, and split. Marker references follow the pages. |
+| Forms | Create and fill text, checkbox, radio, dropdown, and list-box fields; use live text for noninteractive forms. |
+| Sign | Type, draw, or import a visible electronic signature; sign a copy with a certificate and validate signed files. |
+| Convert & OCR | Explicit output formats, quality options, measured compression results, whole-document OCR, and batch results with unique output names. |
+| Redact | Queue selected text/areas and export a fresh PDF whose removed pixels cannot be recovered from the output image. |
+| Assistant | Ask questions, summarize all text sections, find key details, explain or translate a selection, and inspect source passages with page navigation. |
+
+The [workspace design](Docs/WORKSPACE_DESIGN.md), [native text engine](Docs/NATIVE_TEXT_EDITING.md), [typography controls](Docs/TYPOGRAPHY_DESIGN.md), [conversion design](Docs/CONVERSION_DESIGN.md), [pages/forms design](Docs/PAGES_FORMS_DESIGN.md), and [assistant design](Docs/ASSISTANT_DESIGN.md) describe behavior and its practical limits. The [PDFgear comparison](Docs/PDFGEAR_RESEARCH.md) checks the requested reference against **10 original sources**, including contradictory marketing claims. Annotate does **not** claim complete PDFgear feature or fidelity parity.
 
 ## Get started
 
-Requires **macOS 26 or newer** and a Swift 6.2+ toolchain with the macOS 26 SDK or newer. Development and verification used **Xcode 27 / Swift 6.4 on macOS 27**; macOS 26 runtime behavior and Intel builds have not yet been verified.
+Requires **macOS 26 or newer** to run. Building requires Swift 6.2+ with the **macOS 26.4 SDK or newer**. Development and runtime verification use **Xcode 27 / Swift 6.4 on Apple Silicon macOS 27**. Older eligible SDKs, macOS 26 runtime behavior, and Intel Macs require separate validation.
 
 ```sh
 git clone https://github.com/mweingartner/annotate.git
@@ -30,61 +35,78 @@ swift test
 open build/Annotate.app
 ```
 
-You can also open `Package.swift` in Xcode. To install your local build, drag `build/Annotate.app` into Applications.
+To build and install in `/Applications/Annotate.app`, quit Annotate normally, then run:
 
-The application and test harness are Swift. The small build script assembles and locally signs the app bundle using Apple's tools; this is an ad-hoc signed build, not a notarized distribution release. The app icon is generated by `Scripts/GenerateIcon.swift`.
+```sh
+./Scripts/install.sh
+```
 
-## Read and mark
+The installer retains a timestamped backup of the previous application under `build/`. Builds are locally ad-hoc signed, not notarized distribution releases. The application and automated tests are Swift; shell scripts invoke Apple's build and packaging tools.
 
-- **Open PDF** or try the built-in reading guide.
-- Select text in the PDF. A panel slides out after the selection finishes.
-- Choose any combination of **Important**, **Revisit**, **Question**, and **Note**. Add a note and question to any passage independently.
-- Choose a highlight color, use the system color picker for a custom color, and choose a marker icon.
-- Click **Save Marker**. The navigation panel lists your markers; click a row to return to the precise location. Use its edit action to revise a marker.
-- Use **Mark Current Location** for a scanned page or a place without selectable text.
-- Filter the panel to important passages, revisit items, questions, or notes. Next/previous marker navigation follows the selected filter.
-- Search shows a clickable result for each occurrence with the matching text in context.
+## Live editing and saving
 
-## Save, print, share
+Choose **Edit** and select a word, line, or paragraph to open its editor. Selecting a passage in Read mode opens the marker editor, where **Edit PDF text** takes you directly into text editing. Type on the PDF or in the side panel; both share the same rich text and character selection. Select characters to change their font, size, color, bold, italic, underline, paragraph alignment, or spacing. With an insertion point, formatting controls apply to the whole block. Use **Add text box** for new native text. Select saved text to edit it again, or click an existing FreeText annotation while Edit is active.
 
-Annotate uses the native macOS document system, including autosave, save dialogs, multiple document windows, and undo/redo for marker changes. Opened PDFs autosave in place; use **Save As** first to work on a separate editable copy. Marker metadata lives inside standard PDF annotations, so the editable document does not depend on sidecar files or an app database. Changes still in the annotation panel must be added with Save Marker; closing a document with changed draft fields asks what to do.
+**Text edits remove the selected source glyphs and save replacement text as native PDF text.** Surrounding text, vectors, images, and annotations are preserved through the content engine. This supports ordinary selectable horizontal text, including embedded subset fonts and positioned text. The editor reads actual source typefaces and effective sizes; unavailable installed fonts produce an explicit substitution notice. It is fixed-area editing: nearby paragraphs do not reflow automatically. Position and size fields provide precise placement; **Fit text height** sizes the block within the page. Unsupported encodings or content structures, ambiguous selections, and overflow fail visibly, with pending text retained for correction or discard.
 
-**Save** retains editable highlights and marker metadata. Other PDF viewers can display the highlights and printable symbol badges. Notes and questions are also stored in standard PDF comment annotations. Annotate updates its older marker appearances when opening an editable document; saving preserves the updated tags. Software that removes custom PDF annotation keys may remove Annotate's category/navigation metadata.
+OCR makes scans searchable. A selection in an invisible OCR layer offers a separate **Edit scanned text** action: it replaces the selected words in the original scan image and inserts visible, selectable PDF text. This requires one supported RGB/grayscale image, a flat paper background, and a precise OCR selection; skewed images, masks, patterned backgrounds, overlapping content, colored artwork, and selections too close to image edges are refused. Rewriting the source image losslessly can increase file size. Ordinary text editing never changes scan pixels implicitly. See the [native text design](Docs/NATIVE_TEXT_EDITING.md) for exact limits.
 
-**Export Annotated PDF** makes a separate sharing copy: visible annotations are drawn permanently into page content, and a paginated annotation index contains the complete passages, notes, questions, and original page references. This copy contains no interactive annotation objects. Keep the editable original to make future changes. Export requires a PDF that allows printing and copying.
+**Images on page** lists existing source images with page-area thumbnails. Selecting one reveals its location and controls for replacement, removal, position, and size. Frame proportions can be locked. **Apply image changes** commits replacement and geometry together as one undoable PDF change; pending controls are retained on failure, and must be applied or discarded before saving or closing. Replacements fill the current frame. Images with clipping or skew can be replaced in place or removed, with movement limits stated beside the controls. Thumbnails can include overlapping page content. Vector artwork is separate from image content. See the [image editing design](Docs/IMAGE_EDITING_DESIGN.md). Image insertion preserves source vector text.
 
-**Print** opens the system print panel and prints the PDF with visible annotations. To print the full notes and questions index too, export the sharing copy and print that file.
+`NSDocument` owns native save/autosave, document windows, and undo/redo. Opened PDFs autosave in place: use **Save As** first if you want a separate editable original. Workspace mutations use independent working copies and complete PDF undo snapshots. Failed operations leave the original document untouched. Pending marker drafts retain their existing save/discard/cancel behavior.
 
-## Keyboard shortcuts
+**Save** retains native text edits, editable annotations, and marker metadata. An unapplied text edit must be corrected or discarded before saving or leaving its editor. **Export Annotated PDF** creates a separate flattened sharing copy with a paginated notes-and-questions index. **Print** uses the system print panel. Derived exports refuse to overwrite the currently open source path. PDF editing, assembly, form-entry, copying, and printing permissions are checked separately.
+
+Sidebar search includes visible text boxes and filled text/choice fields and navigates to their page areas. Text exports and AI evidence include those values after the original page text in labeled reading order. Hidden annotations, marker badges, and password fields are excluded. Text inside page images still requires OCR; the assistant does not inspect image pixels.
+
+## Choose your AI provider
+
+Open **Assistant** and choose the provider above the question composer. **Settings** exposes the model and connection details. API keys are stored only in Annotate's macOS Keychain service; they are not embedded in PDFs or saved in repository files.
+
+- **Ollama:** start Ollama and download a model, then use **Find installed models** in Settings. Annotate connects to a loopback address and checks that the model is locally downloaded before sending PDF text. It does not install models or use Ollama cloud aliases.
+- **OpenAI API:** enter an API key and a Responses-compatible model. Requests go to OpenAI with Responses storage disabled. Account/model access and API billing are separate from a ChatGPT subscription.
+- **Claude API:** enter an API key, model, and workspace ID if required by that key. Requests go to Anthropic's Messages API.
+- **Apple Intelligence:** uses the system on-device model when the Mac and system configuration support it. The panel reports unavailability instead of pretending generation succeeded.
+
+For **Ollama** and **Apple Intelligence**, **Ask**, **Summarize**, and **Key details** read the evidence and generate locally in one explicit action. The newest answer includes clickable source pages and expandable original passages. **More actions** provides selection explanation, translation, and **Find sources**, which searches the PDF locally without a model.
+
+For **OpenAI API** and **Claude API**, the first action prepares evidence locally and opens **Review before sending**. Inspect the passages and request details, including page coverage, model, request count, source size, and output-token allowance. Only the separate **Send to OpenAI API** or **Send to Claude API** action transmits that request and may incur API charges. Choosing providers or preparing evidence does not upload the PDF. There are no automatic paid retries. Cancellation cannot retract a request already accepted by a provider.
+
+The assistant checks every page during extraction and reports image-only pages needing OCR. Questions use a disclosed lexical-retrieval subset; full summaries process every text section separately. Context and input limits are explicit. Generated answers may be wrong; inspect the source passages. No model gets tools, file access, or permission to edit the PDF.
+
+## Redaction and format limits
+
+**Export Redacted Copy** creates a new image-only PDF after blackening selected pixels in a bitmap. It carries over no source text layer, interactive annotations, metadata, attachments, or editing history. The open original remains unredacted. Verify the exported file before sharing it. The operation removes interactivity and searchable text throughout the sanitized copy.
+
+Conversion offers 13 output types: PDF, DOCX, DOC, ODT, RTF, TXT, HTML, XLSX, PPTX, PNG, JPEG, TIFF, and HEIC. XLSX contains editable text cells on one worksheet per page, with tab/repeated-space column detection; it does not infer formulas or guarantee table reconstruction. PPTX contains one rendered PDF page per slide, preserving appearance rather than editable slide objects. Excel/PowerPoint input files must first be exported to PDF in their originating app. Word/RTF/OpenDocument/HTML exports preserve available text styling in reading order, not complex page layout, image placement, or reconstructed tables. Scans require OCR for text export. Compression reports actual before/after byte counts; some PDFs cannot be reduced. See the conversion design for the exact current formats and Office fidelity limits.
+
+Typed, drawn, and image signatures provide visible electronic appearances. The **Sign** panel also offers certificate signing: explicitly load Keychain identities, choose a certificate, then **Sign a copy…**. It creates a detached SHA-256 approval signature without modifying the original. **Validate a signed PDF…** checks the file's original bytes and reports integrity, certificate trust on this Mac, and unsigned appended changes separately. Self-signed certificates are reported as untrusted. Encrypted PDFs, incremental co-signing, trusted timestamps, online revocation, and long-term archival validation are unsupported. See [certificate design and verification](Docs/CERTIFICATE_SIGNATURES.md).
+
+PDFKit form behavior and external-reader interoperability vary; radio controls require particular attention when exchanged with another reader. The app covers the reference product's major workflows with the stated format, fidelity, and signature limits.
+
+## Shortcuts
 
 | Action | Shortcut |
 | --- | --- |
-| Open PDF | ⌘O |
-| Save | ⌘S |
-| Save As | ⇧⌘S |
-| Search PDF | ⌘F |
+| New PDF / open PDF | ⌘N / ⌘O |
+| Save / Save As | ⌘S / ⇧⌘S |
+| Edit PDF / document assistant | ⌥⌘E / ⌥⌘J |
+| Search | ⌘F |
 | Add location marker | ⇧⌘M |
 | Previous / next marker | ⌥⌘[ / ⌥⌘] |
-| Toggle navigation panel | ⌥⌘S |
-| Export sharing copy | ⇧⌘E |
-| Print | ⌘P |
-| Undo / redo marker change | ⌘Z / ⇧⌘Z |
-| Zoom in / out / fit width | ⌘+ / ⌘− / ⌘0 |
+| Toggle marker panel | ⌥⌘S |
+| Export annotated PDF / print | ⇧⌘E / ⌘P |
+| Undo / redo | ⌘Z / ⇧⌘Z |
+| Zoom in / out / fit | ⌘+ / ⌘− / ⌘0 |
 
-## Testing and implementation
+## Verification and security
 
-The test harness uses real PDFKit documents and generated fixtures to exercise marker persistence, multi-page selections, category membership, attached writing, undo/redo, malformed metadata, search, PDF permissions, document lifecycle, and flattened export. The recorded verification run passed **57 test functions covering 137 scenarios**; its scope and remaining gaps are documented in the [polish verification report](Docs/POLISH_VERIFICATION.md).
+The Swift Testing harness uses generated real PDFs, scanned fixtures, reopened outputs, pixel assertions, and provider transport fixtures. It exercises marker compatibility, complete workspace undo, page remapping, forms, signature appearances, conversions, OCR geometry, sanitization, AI coverage/cancellation, and secret-handling boundaries. See [workspace verification](Docs/WORKSPACE_VERIFICATION.md) for the exact latest results and runtime scope.
 
-See the [architecture and Apple API references](Docs/ARCHITECTURE.md) and [test plan](Docs/TEST_PLAN.md) for implementation details and reproducible checks. The architecture and testing documentation reference **10 distinct original Apple sources**.
+Tests do not invoke paid AI APIs. The optional local test uses an already-running Ollama installation:
 
-## Practical limits
+```sh
+ANNOTATE_LOCAL_AI_SMOKE=1 ANNOTATE_LOCAL_AI_MODEL=granite4.1:8b swift test --filter AssistantLocalSmokeTests
+```
 
-Text selection and text search require a PDF text layer; this release does not perform OCR. Image-only pages support location markers. The app respects PDF commenting, printing, and copying permissions. Flattened exports retain vector/text content where PDFKit's renderer supports it; interactive forms, links, and annotation popovers are intentionally flattened for sharing. Very large PDFs and accessibility behavior beyond the tested paths remain areas for broader real-world validation.
-
-## Security
-
-See the [security policy](SECURITY.md) for supported versions and how to [report a vulnerability privately](https://github.com/mweingartner/annotate/security/advisories/new).
-
-## License
-
-Annotate is available under the [MIT License](LICENSE).
+See [SECURITY.md](SECURITY.md) and [private vulnerability reporting](https://github.com/mweingartner/annotate/security/advisories/new). Annotate is available under the [MIT License](LICENSE).

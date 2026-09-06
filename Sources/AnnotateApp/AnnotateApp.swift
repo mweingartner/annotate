@@ -38,12 +38,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Annotate"
         window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 760, height: 600)
-        window.contentViewController = NSHostingController(rootView: WelcomeView(model: welcomeModel))
+        window.contentViewController = NSHostingController(rootView: ReaderView(model: welcomeModel))
         window.center()
         welcome = NSWindowController(window: window)
         welcome?.showWindow(nil)
     }
     @objc func openSample() { welcomeModel.openSample() }
+    @objc func newPDF() { welcomeModel.newBlankPDF() }
+    @objc func convertFiles() {
+        if let activeModel { activeModel.showTool(.convert) }
+        else { showWelcome(); welcomeModel.activeTool = .convert }
+    }
+    @objc func editPDF() { activeModel?.showTool(.edit) }
+    @objc func organizePages() { activeModel?.showTool(.pages) }
+    @objc func fillForms() { activeModel?.showTool(.forms) }
+    @objc func signPDF() { activeModel?.showTool(.sign) }
+    @objc func redactPDF() { activeModel?.showTool(.redact) }
+    @objc func documentAssistant() { activeModel?.showTool(.assistant) }
     @objc func find() { activeModel?.showSearch() }
     @objc func addMarker() { activeModel?.beginPageMarker() }
     @objc func nextMarker() { activeModel?.navigateMarker(1) }
@@ -88,7 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item("Show All", #selector(NSApplication.unhideAllApplications(_:)), "", app)
         app.addItem(.separator()); item("Quit Annotate", #selector(NSApplication.terminate(_:)), "q", app)
         let file = menu("File")
+        item("New Blank PDF", #selector(newPDF), "n", file, target: self)
         item("Open PDF…", #selector(NSDocumentController.openDocument(_:)), "o", file, target: NSDocumentController.shared)
+        item("Create, Convert & OCR…", #selector(convertFiles), "", file, target: self)
         item("Open Reading Guide", #selector(openSample), "", file, target: self)
         file.addItem(.separator())
         item("Close", #selector(NSWindow.performClose(_:)), "w", file)
@@ -105,6 +118,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item("Paste", #selector(NSText.paste(_:)), "v", edit)
         item("Select All", #selector(NSText.selectAll(_:)), "a", edit)
         edit.addItem(.separator()); item("Find in PDF…", #selector(find), "f", edit, target: self)
+        let tools = menu("Tools")
+        item("Edit PDF Text", #selector(editPDF), "e", tools, modifiers: [.command, .option], target: self)
+        item("Organize Pages", #selector(organizePages), "", tools, target: self)
+        item("Fill & Create Forms", #selector(fillForms), "", tools, target: self)
+        item("Electronic Signatures", #selector(signPDF), "", tools, target: self)
+        item("Convert, Compress & OCR", #selector(convertFiles), "", tools, target: self)
+        item("Redact PDF", #selector(redactPDF), "", tools, target: self)
+        item("Document Assistant", #selector(documentAssistant), "j", tools, modifiers: [.command, .option], target: self)
         let view = menu("View")
         item("Toggle Marker Panel", #selector(toggleSidebar), "s", view, modifiers: [.command, .option], target: self)
         item("All Markers", #selector(allMarkers), "", view, target: self)

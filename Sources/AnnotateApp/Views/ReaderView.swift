@@ -8,12 +8,15 @@ struct ReaderView: View {
         VStack(spacing: 0) {
             ReaderHeader(model: model)
             Divider()
+            WorkspaceToolbar(model: model)
+            Divider()
             if let message = model.errorMessage {
                 ReaderErrorBanner(message: message, dismiss: dismissError)
                 Divider()
             }
             if model.pdfDocument == nil {
-                WelcomeView(model: model)
+                if model.activeTool == .convert { WorkspacePanel(model: model, tool: .convert).frame(maxWidth: 640) }
+                else { WelcomeView(model: model) }
             } else {
                 HSplitView {
                     if model.sidebarVisible {
@@ -24,7 +27,10 @@ struct ReaderView: View {
                     PDFReaderView(model: model)
                         .frame(minWidth: 330, maxWidth: .infinity, maxHeight: .infinity)
                         .accessibilityLabel("PDF document")
-                    if model.inspectorVisible, model.draft != nil {
+                    if let tool = model.activeTool {
+                        WorkspacePanel(model: model, tool: tool)
+                            .frame(minWidth: 360, idealWidth: 390, maxWidth: 460)
+                    } else if model.inspectorVisible, model.draft != nil {
                         MarkerInspector(model: model)
                             .frame(minWidth: 292, idealWidth: 318, maxWidth: ReaderStyle.panelMaximum)
                             .transition(panelTransition(edge: .trailing))

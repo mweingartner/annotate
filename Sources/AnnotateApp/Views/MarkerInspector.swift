@@ -8,11 +8,11 @@ struct MarkerInspector: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(draft.isEditing ? "Edit your marker" : "Capture a thought")
+                        Text(draft.isEditing ? "Edit marker" : draft.quote.isEmpty ? "Mark this page" : "Annotate passage")
                             .font(.title2)
                             .fontDesign(.serif)
                             .bold()
-                        Text(draft.regions.count > 1 ? "Passage on page \((draft.regions.first?.pageIndex ?? 0) + 1)" : "Page \((draft.regions.first?.pageIndex ?? 0) + 1)")
+                        Text(MarkerPresentation.pageLabel(regions: draft.regions))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -24,6 +24,11 @@ struct MarkerInspector: View {
                 }
                 .padding(ReaderStyle.panelPadding)
                 Divider()
+
+                if !draft.isEditing, !draft.quote.isEmpty {
+                    PassageActions(model: model)
+                    Divider()
+                }
 
                 MarkerDraftEditor(draft: draft)
 

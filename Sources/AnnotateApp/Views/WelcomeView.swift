@@ -29,7 +29,7 @@ struct WelcomeView: View {
                     WelcomeFeature(symbol: "square.and.arrow.up", title: "Share the thinking", detail: "Print or export a PDF with visible marks and a readable notes index.", color: .indigo)
                 }
 
-                Label("Built with Apple PDFKit. Your documents stay on your Mac.", systemImage: "lock.shield")
+                Label("Local PDF tools. Choose local or cloud AI when you need it.", systemImage: "lock.shield")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)

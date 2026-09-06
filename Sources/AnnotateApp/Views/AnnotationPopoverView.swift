@@ -7,6 +7,7 @@ struct AnnotationPopoverView: View {
     let hasPendingDraft: Bool
     let edit: () -> Void
     let close: () -> Void
+    var delete: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,14 +19,15 @@ struct AnnotationPopoverView: View {
                     .background(Color(nsColor: marker.color.nsColor), in: .rect(cornerRadius: 8))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Your annotation").font(.headline)
-                    Text("Page \(marker.pageIndex + 1)").font(.callout).foregroundStyle(.secondary)
+                    Text("Saved marker").font(.headline)
+                    Text(MarkerPresentation.pageLabel(regions: marker.regions)).font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Close annotation", systemImage: "xmark", action: close)
                     .labelStyle(.iconOnly)
                     .buttonStyle(.bordered)
                     .help("Close this annotation")
+                    .keyboardShortcut(.escape, modifiers: [])
             }
             .padding(18)
             Divider()
@@ -41,7 +43,7 @@ struct AnnotationPopoverView: View {
                         Text("A saved place to return to in this document.").foregroundStyle(.secondary)
                     }
                     if hasPendingDraft {
-                        Text("Save or cancel the open draft before editing another annotation.")
+                        Text("Save or cancel the open draft before editing or deleting a marker.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -52,11 +54,16 @@ struct AnnotationPopoverView: View {
             .frame(maxHeight: 380)
             Divider()
             HStack {
-                Button("Close", action: close)
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut(.escape, modifiers: [])
+                if let delete {
+                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+                        .buttonStyle(.borderless)
+                        .disabled(!canEdit || hasPendingDraft)
+                        .help("Delete this marker; Undo restores it")
+                } else {
+                    Button("Close", action: close).buttonStyle(.bordered)
+                }
                 Spacer()
-                Button("Edit annotation", systemImage: "square.and.pencil", action: edit)
+                Button("Edit marker", systemImage: "square.and.pencil", action: edit)
                     .buttonStyle(.borderedProminent)
                     .tint(ReaderStyle.actionFill)
                     .foregroundStyle(.white)

@@ -9,7 +9,7 @@ import Testing
 @MainActor
 struct ReaderModelTests {
     @Test("A selected passage saves combined categories, custom color, note and question")
-    func saveSelectedPassage() throws {
+    func saveSelectedPassage() async throws {
         let document = makeDocument()
         let model = document.model
         let selection = try #require(model.pdfDocument?.findString("attention", withOptions: .caseInsensitive).first)
@@ -34,6 +34,7 @@ struct ReaderModelTests {
         #expect(abs(marker.color.blue - 0.8) < 0.001)
         #expect(marker.quote.lowercased() == "attention")
         #expect(model.draft == nil && !model.inspectorVisible)
+        try await Task.sleep(for: .milliseconds(60))
         #expect(document.isDocumentEdited)
         let data = try document.data(ofType: "com.adobe.pdf")
         let reopened = try #require(PDFDocument(data: data))
@@ -107,8 +108,8 @@ struct ReaderModelTests {
             #expect(text.lowercased().contains("attention"))
             #expect(text.count > "attention".count)
             #expect(!text.contains("\n"))
-            #expect(hit.selection.string?.lowercased() == "attention")
-            #expect(hit.selection.pages.first === pdf.page(at: hit.pageIndex))
+            #expect(hit.selection?.string?.lowercased() == "attention")
+            #expect(hit.selection?.pages.first === pdf.page(at: hit.pageIndex))
             #expect(hit.snippet.runs.contains { $0.font != nil })
         }
     }
@@ -121,7 +122,7 @@ struct ReaderModelTests {
         model.query = "specific question"
         try await waitForSearch(model)
         #expect(!model.searchResults.isEmpty)
-        #expect(model.searchResults.allSatisfy { $0.selection.string?.lowercased() == "specific question" })
+        #expect(model.searchResults.allSatisfy { $0.selection?.string?.lowercased() == "specific question" })
         model.query = "attention"
         model.query = " \n "
         #expect(!model.isSearching)
@@ -215,6 +216,37 @@ struct ReaderModelTests {
         #expect(model.pageNumber == 3)
         model.goToPage(Int.max)
         #expect(model.pageNumber == 3)
+    }
+
+    @Test("Search finds saved text boxes and form values, navigates their areas, and refreshes after native edits")
+    func liveContentSearch() async throws {
+        let source = SamplePDF.make()
+        let term = "Canvas search 932"
+        let area = PageRegion(pageIndex: 3, bounds: CGRect(x: 70, y: 100, width: 260, height: 30))
+        try PDFContentEditor.addText(term, in: area, document: source, font: .systemFont(ofSize: 12), color: .black)
+        try PDFFormEditor.create(in: source, region: PageRegion(pageIndex: 1, bounds: area.bounds), name: "SearchField", kind: .text)
+        try PDFFormEditor.fill(in: source, field: #require(PDFFormEditor.fields(in: source).first), value: term)
+        let bytes = try #require(source.dataRepresentation())
+        let pdf = try #require(PDFDocument(data: bytes))
+        let owner = AnnotateDocument(), model = owner.model
+        model.load(pdf, owner: owner)
+        let view = SelectionPDFView(frame: CGRect(x: 0, y: 0, width: 700, height: 700))
+        view.document = pdf; view.model = model; model.pdfView = view
+        model.query = term
+        try await waitForSearch(model)
+        #expect(model.searchResults.count == 2)
+        #expect(Set(model.searchResults.map(\.pageIndex)) == [1, 3])
+        let boxHit = try #require(model.searchResults.first { $0.pageIndex == 3 })
+        #expect(boxHit.selection == nil)
+        #expect(boxHit.bounds != nil)
+        model.jump(to: boxHit)
+        #expect(model.pageNumber == 4)
+        #expect(view.currentPage === pdf.page(at: 3))
+        try PDFFormEditor.fill(in: pdf, field: #require(PDFFormEditor.fields(in: pdf).first), value: "Revised value")
+        try await waitForSearch(model)
+        #expect(model.searchResults.count == 1)
+        #expect(model.searchResults.first?.pageIndex == 3)
+        withExtendedLifetime(view) {}
     }
 
     private func makeDocument() -> AnnotateDocument {

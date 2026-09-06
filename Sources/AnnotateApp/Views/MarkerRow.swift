@@ -38,7 +38,7 @@ struct MarkerRow: View {
                             }
                         }
                         Spacer()
-                        Text("\(marker.pageIndex + 1)")
+                        Text(MarkerPresentation.pageLabel(regions: marker.regions))
                             .font(.callout)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -68,19 +68,20 @@ struct MarkerRow: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Page \(marker.pageIndex + 1), \(orderedCategories.map(\.title).joined(separator: ", ")), \(marker.quote.isEmpty ? "Page marker" : marker.quote)")
+            .accessibilityLabel("\(MarkerPresentation.pageLabel(regions: marker.regions)), \(orderedCategories.map(\.title).joined(separator: ", ")), \(marker.quote.isEmpty ? "Page marker" : marker.quote)")
             .accessibilityHint("Go to this exact passage")
 
             if selected {
                 HStack {
-                    Text("CURRENT MARKER")
-                        .font(.caption)
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
+                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+                        .buttonStyle(.borderless)
+                        .disabled(!canEdit)
+                        .help("Delete this marker; Undo restores it")
                     Spacer()
                     Button("Edit", systemImage: "square.and.pencil", action: edit)
                         .buttonStyle(.borderless)
                         .disabled(!canEdit)
+                        .help("Edit categories, color, icon, note, or question")
                 }
                 .padding(.top, 4)
             }

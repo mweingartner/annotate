@@ -12,18 +12,18 @@ struct WelcomeIntro: View {
                 .glassEffect(.regular.tint(ReaderStyle.accent.opacity(0.1)), in: .rect(cornerRadius: 18))
                 .accessibilityHidden(true)
 
-            Text("A SPACE FOR CLOSE READING")
+            Text("YOUR PDF WORKSPACE")
                 .font(.caption)
                 .tracking(1.7)
                 .foregroundStyle(.secondary)
 
-            Text("Find your place.\nKeep your thinking.")
+            Text("Read. Edit.\nMake it yours.")
                 .font(.largeTitle)
                 .fontDesign(.serif)
                 .bold()
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("A home for the passages that matter, the questions they raise, and the ideas you want to return to.")
+            Text("Live text editing, thoughtful annotations, pages, forms, signatures, conversion, OCR, and your choice of AI assistant.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -39,6 +39,11 @@ struct WelcomeIntro: View {
                     .controlSize(.large)
             }
             .padding(.top, 5)
+            HStack {
+                Button("New Blank PDF", systemImage: "doc.badge.plus", action: model.newBlankPDF)
+                Button("Create or Convert Files…", systemImage: "arrow.triangle.2.circlepath") { model.activeTool = .convert }
+            }
+            .buttonStyle(.borderless)
 
             Text("Select text to start. Every mark leads right back.")
                 .font(.callout)

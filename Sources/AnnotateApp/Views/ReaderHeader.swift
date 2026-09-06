@@ -29,7 +29,7 @@ struct ReaderHeader: View {
 
                 HStack(spacing: ReaderStyle.compactSpacing) {
                     Button("Zoom out", systemImage: "minus.magnifyingglass", action: model.zoomOut)
-                Button("Fit width", systemImage: "arrow.up.left.and.arrow.down.right", action: model.fitPage)
+                    Button("Fit page", systemImage: "arrow.up.left.and.arrow.down.right", action: model.fitPage)
                     Button("Zoom in", systemImage: "plus.magnifyingglass", action: model.zoomIn)
                 }
                 .labelStyle(.iconOnly)
@@ -39,11 +39,11 @@ struct ReaderHeader: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Document zoom")
 
-                Button("Mark page", systemImage: "bookmark.badge.plus", action: model.beginPageMarker)
+                Button("Mark page", systemImage: "bookmark.badge.plus", action: model.markCurrentPageFromWorkspace)
                     .buttonStyle(.borderedProminent)
                     .tint(ReaderStyle.actionFill)
                     .foregroundStyle(.white)
-                    .disabled(!model.canEdit)
+                    .disabled(!model.canEdit || model.isProcessing)
                     .help("Add a marker to the current page; select text for a passage marker")
             }
 

@@ -24,6 +24,16 @@ final class ReaderModel {
     var canEdit = false
     var searchFocusRequest = 0
     var statusMessage = ""
+    var activeTool: WorkspaceTool?
+    var toolSelection: PageRegion?
+    var selectingToolArea = false
+    var documentRevision = 0 { didSet { if !query.isEmpty { scheduleSearch() } } }
+    var isProcessing = false
+    var operationProgress = ""
+    var liveEdit: LiveTextEdit?
+    var imageEdit: ImageEditSession?
+    var redactionRegions: [PageRegion] = []
+    @ObservationIgnored var operationTask: Task<Void, Never>?
     @ObservationIgnored weak var owner: AnnotateDocument?
     @ObservationIgnored weak var pdfView: SelectionPDFView?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
@@ -39,9 +49,11 @@ final class ReaderModel {
     }
 
     func load(_ document: PDFDocument, owner: AnnotateDocument) {
+        imageEdit = nil
         self.owner = owner
         pdfDocument = document
         MarkerCodec.refreshAppearance(in: document)
+        PDFFormEditor.refreshRadioOptions(in: document)
         markers = MarkerCodec.markers(in: document)
         pageCount = document.pageCount
         fileName = owner.displayName ?? "Untitled PDF"
@@ -67,6 +79,17 @@ final class ReaderModel {
     func setFilter(_ value: MarkerFilter) { filter = value; query = ""; sidebarVisible = true }
 
     func captureSelection(_ selection: PDFSelection) {
+        guard !suppressSelection else { return }
+        if activeTool != nil {
+            if let document = pdfDocument {
+                toolSelection = MarkerCodec.regions(for: selection, in: document).first
+            }
+            if activeTool == .edit, liveEdit == nil,
+               selection.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                beginLiveText(replacingSelection: true)
+            }
+            return
+        }
         guard !suppressSelection, canEdit, let document = pdfDocument,
               let quote = selection.string?.trimmingCharacters(in: .whitespacesAndNewlines), !quote.isEmpty else { return }
         guard !hasDraftChanges else { inspectorVisible = true; return }
@@ -78,6 +101,7 @@ final class ReaderModel {
     }
 
     func beginPageMarker() {
+        guard finishLiveText() else { return }
         guard canEdit, !hasDraftChanges, let view = pdfView, let page = view.currentPage,
               let document = pdfDocument else { inspectorVisible = draft != nil; return }
         let index = document.index(for: page)
@@ -90,6 +114,7 @@ final class ReaderModel {
     }
 
     func edit(_ marker: PDFMarker) {
+        guard finishLiveText() else { return }
         guard !hasDraftChanges else { inspectorVisible = true; return }
         selectedMarkerID = marker.id
         draft = MarkerDraft(id: marker.id, categories: marker.categories, color: Color(nsColor: marker.color.nsColor),
@@ -114,7 +139,7 @@ final class ReaderModel {
             try MarkerCodec.apply(marker, to: document)
             registerUndo(previous: previous, current: marker)
             refreshMarkers()
-            owner?.updateChangeCount(.changeDone)
+            recordDocumentChange()
             selectedMarkerID = marker.id
             statusMessage = previous == nil ? "Marker added" : "Marker updated"
             cancelDraft()
@@ -132,7 +157,7 @@ final class ReaderModel {
         registerUndo(previous: marker, current: nil)
         if draft?.id == marker.id { cancelDraft() }
         refreshMarkers()
-        owner?.updateChangeCount(.changeDone)
+        recordDocumentChange()
     }
     private func registerUndo(previous: PDFMarker?, current: PDFMarker?) {
         owner?.undoManager?.registerUndo(withTarget: self) { target in
@@ -147,10 +172,12 @@ final class ReaderModel {
             else if let current { MarkerCodec.remove(id: current.id, from: document) }
             registerUndo(previous: current, current: marker)
             refreshMarkers()
+            recordDocumentChange()
             if let draft, draft.id == (marker?.id ?? current?.id) { cancelDraft() }
         } catch { errorMessage = error.localizedDescription }
     }
     private func refreshMarkers() {
+        documentRevision += 1
         pdfView?.closeAnnotationPopover()
         guard let document = pdfDocument else { return }
         markers = MarkerCodec.markers(in: document)
@@ -171,8 +198,13 @@ final class ReaderModel {
     func jump(to hit: SearchHit) {
         guard let view = pdfView else { return }
         suppressSelection = true
-        view.setCurrentSelection(hit.selection, animate: true)
-        view.go(to: hit.selection)
+        if let selection = hit.selection {
+            view.setCurrentSelection(selection, animate: true)
+            view.go(to: selection)
+        } else if let bounds = hit.bounds, let page = pdfDocument?.page(at: hit.pageIndex) {
+            view.clearSelection()
+            view.go(to: bounds.insetBy(dx: -24, dy: -50), on: page)
+        }
         suppressSelection = false
         pageNumber = hit.pageIndex + 1
     }
@@ -196,7 +228,7 @@ final class ReaderModel {
         searchTask?.cancel()
         searchResults = []
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty, let document = pdfDocument else { isSearching = false; return }
+        guard !term.isEmpty, let document = pdfDocument, !document.isLocked, document.allowsCopying else { isSearching = false; return }
         isSearching = true
         searchTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(220)) } catch { return }
@@ -224,7 +256,20 @@ final class ReaderModel {
                         guard !Task.isCancelled else { return }
                     }
                 }
+                if let page = document.page(at: pageIndex), let additions = try? PDFPageText.visibleAnnotations(on: page) {
+                    for addition in additions {
+                        let text = (addition.label + ": " + addition.text).replacingOccurrences(of: "\n", with: " ") as NSString
+                        let match = text.range(of: term, options: [.caseInsensitive, .diacriticInsensitive])
+                        guard match.location != NSNotFound else { continue }
+                        let start = max(0, match.location - 65), end = min(text.length, NSMaxRange(match) + 100)
+                        let range = text.rangeOfComposedCharacterSequences(for: NSRange(location: start, length: end - start))
+                        var snippet = AttributedString((start > 0 ? "…" : "") + text.substring(with: range) + (end < text.length ? "…" : ""))
+                        if let match = snippet.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) { snippet[match].font = .body.bold() }
+                        searchResults.append(SearchHit(pageIndex: pageIndex, snippet: snippet, bounds: addition.bounds))
+                    }
+                }
                 await Task.yield()
+                guard !Task.isCancelled else { return }
             }
             self.isSearching = false
         }
