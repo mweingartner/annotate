@@ -25,11 +25,22 @@ final class PDFNativeGlyphPlacement {
     let fontBaseName: String
     let fontSize: Double
     let fillColor: CGColor?
+    /// The pen position on the baseline where this glyph is drawn, in page space.
+    let origin: CGPoint
+    /// How far the pen moves after this glyph (its width plus character and word
+    /// spacing), in page space.
+    let advance: Double
+    /// Character spacing (Tc) in page-space points.
+    let characterSpacing: Double
+    /// Whether the glyph is set upright on a horizontal baseline (no rotation or skew).
+    let upright: Bool
     var selected = false
-    init(glyph: PDFNativeGlyph, bounds: CGRect, compensation: Double, clipping: Bool, invisible: Bool, fontBaseName: String, fontSize: Double, fillColor: CGColor?) {
+    init(glyph: PDFNativeGlyph, bounds: CGRect, compensation: Double, clipping: Bool, invisible: Bool, fontBaseName: String, fontSize: Double,
+         fillColor: CGColor?, origin: CGPoint = .zero, advance: Double = 0, characterSpacing: Double = 0, upright: Bool = false) {
         self.glyph = glyph; self.bounds = bounds; self.compensation = compensation; self.clipping = clipping; self.invisible = invisible
         self.fontBaseName = fontBaseName; self.fontSize = fontSize
         self.fillColor = fillColor
+        self.origin = origin; self.advance = advance; self.characterSpacing = characterSpacing; self.upright = upright
     }
 }
 
@@ -63,6 +74,10 @@ final class PDFNativeTextProgram {
     var forms: [Int: PDFNativeTextProgram] = [:]
     var images: [Int: PDFNativeImagePlacement] = [:]
     var glyphs: [PDFNativeGlyphPlacement] = []
+    /// Font descriptor flags by base name, for choosing a like substitute.
+    var fontFlags: [String: Int] = [:]
+    /// Page-space bounds of each form XObject's box, by the index of its Do operator.
+    var formBounds: [Int: CGRect] = [:]
     var markedActualText = false
     private var textEnds: [Int: (Int, CGAffineTransform)] = [:]
     var endState: State
@@ -103,6 +118,7 @@ final class PDFNativeTextProgram {
             case "Tf":
                 guard let name = args.first?.name, let resources, let fonts = nativeDictionary(resources, "Font"), let font = nativeDictionary(fonts, name) else { throw PDFNativeTextError.unsupported("The PDF references a missing font resource.") }
                 state.font = try PDFNativeFont(font); state.fontSize = try number(1)
+                if let loaded = state.font { fontFlags[loaded.baseName] = loaded.flags }
             case "Tc": state.characterSpace = try number(0)
             case "Tw": state.wordSpace = try number(0)
             case "Tz": state.horizontalScale = try number(0) / 100
@@ -139,9 +155,15 @@ final class PDFNativeTextProgram {
                             let bounds = CGRect(x: 0, y: font.descent / 1000, width: max(0.001, glyph.width / 1000), height: max(0.001, (font.ascent - font.descent) / 1000)).applying(transform)
                             let compensation = -(glyph.width + (state.fontSize == 0 ? 0 : spacing / state.fontSize * 1000))
                             guard [bounds.minX, bounds.minY, bounds.width, bounds.height, advance, compensation].allSatisfy(\.isFinite) else { throw PDFNativeTextError.malformed("The text transform contains invalid coordinates.") }
+                            // The pen's page-space position and movement, for matching an edit's layout.
+                            let pen = state.matrix.concatenating(state.ctm)
+                            let penScale = hypot(pen.a, pen.b)
+                            let upright = abs(pen.b) < 0.0001 && abs(pen.c) < 0.0001 && pen.a > 0 && pen.d > 0
                             let placement = PDFNativeGlyphPlacement(glyph: glyph, bounds: bounds,
                                 compensation: compensation, clipping: state.renderingMode >= 4, invisible: state.renderingMode == 3 || state.fillAlpha == 0,
-                                fontBaseName: font.baseName, fontSize: hypot(transform.c, transform.d), fillColor: state.fillColor?.copy(alpha: state.fillAlpha))
+                                fontBaseName: font.baseName, fontSize: hypot(transform.c, transform.d), fillColor: state.fillColor?.copy(alpha: state.fillAlpha),
+                                origin: CGPoint(x: 0, y: state.rise).applying(pen), advance: advance * penScale,
+                                characterSpacing: state.characterSpace * state.horizontalScale * penScale, upright: upright)
                             pieces.append(.glyph(placement)); glyphs.append(placement); state.advance(advance)
                             guard glyphs.count <= 250_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe glyph-editing limit.") }
                         }
@@ -161,7 +183,16 @@ final class PDFNativeTextProgram {
                 }
                 let nested = try PDFNativeTextProgram(data: nativeDecodedStream(stream), resources: nativeDictionary(dictionary, "Resources") ?? resources,
                     state: nestedState, sourceStream: stream, ancestors: ancestors.union([identity]), depth: depth + 1)
+                if let box = nativeArray(dictionary, "BBox"), CGPDFArrayGetCount(box) == 4 {
+                    let values = (0..<4).compactMap { nativeArrayNumber(box, $0) }
+                    if values.count == 4, values.allSatisfy(\.isFinite) {
+                        let rect = CGRect(x: min(values[0], values[2]), y: min(values[1], values[3]),
+                                          width: abs(values[2] - values[0]), height: abs(values[3] - values[1]))
+                        formBounds[index] = rect.applying(nestedState.ctm)
+                    }
+                }
                 forms[index] = nested; glyphs.append(contentsOf: nested.glyphs)
+                fontFlags.merge(nested.fontFlags) { current, _ in current }
                 guard glyphs.count <= 250_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe glyph-editing limit.") }
             case "BDC":
                 if args.contains(where: { if case .dictionary(let value) = $0 { return value["ActualText"] != nil }; return false }) { markedActualText = true }

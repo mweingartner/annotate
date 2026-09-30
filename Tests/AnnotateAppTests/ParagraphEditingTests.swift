@@ -84,8 +84,11 @@ struct ParagraphEditingTests {
         let pitch = try #require(ParagraphText.linePitch(of: found, on: page))
         let font = try #require(session.attributedText.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
         let style = try #require(session.attributedText.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)
-        let natural = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
-        #expect(abs(natural + style.lineSpacing - pitch) < 0.5)
+        // A fixed line height (MatchedLayout) reproduces the pitch; MatchedLayoutTests
+        // checks the resulting baselines exactly.
+        _ = font
+        #expect(style.minimumLineHeight > 0 && style.minimumLineHeight == style.maximumLineHeight)
+        #expect(abs(style.minimumLineHeight - pitch) < 2)
     }
 
     @Test("Line pitch keeps the first line in place and spaces the rest")

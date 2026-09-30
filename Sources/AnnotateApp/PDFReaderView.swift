@@ -177,11 +177,11 @@ final class SelectionPDFView: PDFView {
         let point = convert(windowPoint, from: nil)
         guard let page = page(for: point, nearest: false) else { return }
         let pagePoint = convert(point, to: page)
-        guard let paragraph = ParagraphText.selection(at: pagePoint, on: page) else { return }
+        guard let paragraph = ParagraphText.paragraph(at: pagePoint, on: page) else { return }
         model.suppressSelection = true
-        setCurrentSelection(paragraph, animate: false)
+        setCurrentSelection(paragraph.selection, animate: false)
         model.suppressSelection = false
-        model.beginLiveText(replacingSelection: true, reflowingLines: true)
+        model.beginLiveText(replacingSelection: true, reflowingLines: paragraph.rewraps)
         guard let field = liveTextView, model.liveEdit != nil else { return }
         let index = field.characterIndexForInsertion(at: field.convert(windowPoint, from: nil))
         field.setSelectedRange(NSRange(location: min(index, field.string.utf16.count), length: 0))

@@ -36,6 +36,8 @@ struct PDFNativeFont {
     let baseName: String
     let ascent: Double
     let descent: Double
+    /// The font descriptor's flags (fixed pitch 1, serif 2, italic 64, force bold 262144).
+    let flags: Int
 
     init(_ dictionary: CGPDFDictionaryRef) throws {
         let subtype = nativeName(dictionary, "Subtype") ?? ""
@@ -118,6 +120,10 @@ struct PDFNativeFont {
             }
         }
         let descriptor = nativeDictionary(metrics, "FontDescriptor")
+        // Flags are a 32-bit field; anything else (a crafted huge or fractional number)
+        // is ignored rather than converted, which would trap.
+        flags = descriptor.flatMap { nativeNumber($0, "Flags") }
+            .flatMap { $0.isFinite && $0 >= 0 && $0 <= Double(UInt32.max) ? Int($0) : nil } ?? 0
         ascent = descriptor.flatMap { nativeNumber($0, "Ascent") } ?? 800
         descent = descriptor.flatMap { nativeNumber($0, "Descent") } ?? -200
         if let map = nativeStream(dictionary, "ToUnicode") {

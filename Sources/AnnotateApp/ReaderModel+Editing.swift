@@ -51,12 +51,31 @@ extension ReaderModel {
                 nativeStyle = try PDFNativeTextStyle.attributedText(in: source, region: region, originalText: text, fallback: fallback)
             } else { nativeStyle = nil }
             var original = nativeStyle?.text ?? fallback
-            if reflowingLines, let lines = original {
-                original = ParagraphText.joiningLines(lines)
-                // Measured on the displayed page, which the selection belongs to.
-                if let selection, let shown = document.page(at: region.pageIndex),
-                   let pitch = ParagraphText.linePitch(of: selection, on: shown),
-                   let joined = original { original = ParagraphText.keepingLinePitch(pitch, in: joined) }
+            if reflowingLines, let lines = original { original = ParagraphText.joiningLines(lines) }
+            let crop = page.bounds(for: .cropBox)
+            // Set like the original (margins, indent, line pitch, alignment, spacing) only
+            // when the layout read from the page is believable and places the text on it.
+            var matched: CGRect?
+            if let layout = nativeStyle?.layout, let text = original,
+               let size = (text.length > 0 ? text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil)?.pointSize,
+               MatchedLayout.isPlausible(layout, fontSize: Double(size)) {
+                let styled = MatchedLayout.styled(text, like: layout, rewrapping: reflowingLines)
+                if let placed = MatchedLayout.bounds(for: styled, like: layout, within: crop, on: document.page(at: region.pageIndex)) {
+                    original = styled
+                    matched = placed
+                }
+            }
+            if matched == nil, reflowingLines, let selection, let shown = document.page(at: region.pageIndex),
+                      let pitch = ParagraphText.linePitch(of: selection, on: shown), let joined = original {
+                // Without glyph positions (rotated text), keep at least the line spacing.
+                original = ParagraphText.keepingLinePitch(pitch, in: joined)
+            }
+            // New text takes the look of the nearest text on the page.
+            var nearbyNotice: String?
+            if !replacingSelection, let shown = document.page(at: region.pageIndex),
+               let nearby = nearestTextStyle(to: region.bounds, on: shown, source: source, pageIndex: region.pageIndex) {
+                original = NSAttributedString(string: text, attributes: nearby.attributes)
+                nearbyNotice = nearby.notice
             }
             let attributes = original.flatMap { $0.length > 0 ? $0.attributes(at: 0, effectiveRange: nil) : nil } ?? [:]
             let font = attributes[.font] as? NSFont ?? NSFont.systemFont(ofSize: 14)
@@ -64,10 +83,12 @@ extension ReaderModel {
             let attributed = original ?? NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
             // PDF selections describe glyph ink. Give the editable layout enough vertical
             // space for its first baseline; the removal region remains the exact selection.
-            let crop = page.bounds(for: .cropBox)
             let height = min(crop.height, max(region.bounds.height + font.pointSize * 0.3, font.pointSize * 1.5))
-            let bounds = CGRect(x: region.bounds.minX, y: max(crop.minY, region.bounds.maxY - height),
-                                width: region.bounds.width, height: height).intersection(crop)
+            // The block puts the first baseline exactly on the original's, between the
+            // original margins; without glyph positions, it covers the selection.
+            let bounds = matched
+                ?? CGRect(x: region.bounds.minX, y: max(crop.minY, region.bounds.maxY - height),
+                          width: region.bounds.width, height: height).intersection(crop)
             let session = LiveTextEdit(identifier: UUID().uuidString, pageIndex: region.pageIndex, text: text,
                 font: font, color: color, bounds: bounds, pageBounds: crop,
                 attributedText: attributed, isExistingContent: replacingSelection)
@@ -75,6 +96,8 @@ extension ReaderModel {
             session.canEditScannedText = nativeStyle?.requiresScannedEditing ?? false
             if let substitutions = nativeStyle?.fontSubstitutions, !substitutions.isEmpty {
                 session.fontSubstitutionMessage = substitutions.joined(separator: " ")
+            } else if let nearbyNotice {
+                session.fontSubstitutionMessage = nearbyNotice
             }
             session.nativeOriginalRegion = region
             session.nativeOriginalText = replacingSelection ? text : ""
@@ -206,6 +229,32 @@ extension ReaderModel {
             }
             pdfView?.refreshLiveEditor()
         }
+    }
+
+    /// The font and colour of the text line nearest `area` (the one above it first, as a
+    /// new line usually continues what precedes it), read from the PDF's own glyphs.
+    func nearestTextStyle(to area: CGRect, on page: PDFPage, source: PDFDocument,
+                          pageIndex: Int) -> (attributes: [NSAttributedString.Key: Any], notice: String?)? {
+        guard let all = page.selection(for: page.bounds(for: .cropBox)) else { return nil }
+        let lines = all.selectionsByLine().filter { $0.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+        func distance(_ line: PDFSelection) -> CGFloat {
+            let box = line.bounds(for: page)
+            let vertical = box.minY >= area.maxY ? box.minY - area.maxY : area.minY >= box.maxY ? (area.minY - box.maxY) * 1.5 : 0
+            let horizontal = max(0, max(box.minX - area.maxX, area.minX - box.maxX))
+            return vertical + horizontal * 0.25
+        }
+        guard let nearest = lines.min(by: { distance($0) < distance($1) }), let text = nearest.string,
+              let fallback = nearest.attributedString, fallback.length > 0 else { return nil }
+        let region = PageRegion(pageIndex: pageIndex, bounds: nearest.bounds(for: page))
+        let style = try? PDFNativeTextStyle.attributedText(in: source, region: region, originalText: text, fallback: fallback)
+        let styled = style?.text ?? fallback
+        let first = styled.attributes(at: 0, effectiveRange: nil)
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        attributes[.font] = first[.font] as? NSFont
+        attributes[.foregroundColor] = first[.foregroundColor] as? NSColor ?? NSColor.black
+        if let kern = first[.kern] { attributes[.kern] = kern }
+        let notice = style.flatMap { $0.fontSubstitutions.isEmpty ? nil : $0.fontSubstitutions.joined(separator: " ") }
+        return attributes[.font] == nil ? nil : (attributes, notice)
     }
 
     /// Text that no longer fits grows its block downward, like a text box in Pages, but

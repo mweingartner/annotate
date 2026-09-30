@@ -9,7 +9,13 @@ import PDFKit
 enum ParagraphText {
     /// The paragraph around `point`, or nil when the point is not on a line of text.
     @MainActor
-    static func selection(at point: CGPoint, on page: PDFPage) -> PDFSelection? {
+    static func selection(at point: CGPoint, on page: PDFPage) -> PDFSelection? { paragraph(at: point, on: page)?.selection }
+
+    /// The paragraph around `point`, and whether it may be rewrapped: lines joined only
+    /// because they share a right edge or centre (a title block, a signature, a column of
+    /// figures) keep their line breaks, so editing one line never rejoins the others.
+    @MainActor
+    static func paragraph(at point: CGPoint, on page: PDFPage) -> (selection: PDFSelection, rewraps: Bool)? {
         guard let all = page.selection(for: page.bounds(for: .cropBox)) else { return nil }
         let lines = all.selectionsByLine().filter {
             $0.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -19,7 +25,14 @@ enum ParagraphText {
         let range = paragraphRange(around: hit, in: frames)
         guard let paragraph = lines[range.lowerBound].copy() as? PDFSelection else { return nil }
         for index in range.dropFirst() { paragraph.add(lines[index]) }
-        return paragraph
+        let rewraps = range.dropFirst().allSatisfy { sharesLeftEdge(frames[$0 - 1], frames[$0]) }
+        return (paragraph, rewraps)
+    }
+
+    /// Whether `lower` continues `upper` along the left edge (same edge, or `upper` indented).
+    static func sharesLeftEdge(_ upper: CGRect, _ lower: CGRect) -> Bool {
+        let height = max(upper.height, lower.height)
+        return abs(upper.minX - lower.minX) <= height * 0.5 || (upper.minX > lower.minX && upper.minX - lower.minX <= height * 3)
     }
 
     /// The indices of the lines that form one paragraph with line `index`. Lines are in
@@ -38,9 +51,13 @@ enum ParagraphText {
         let gap = upper.minY - lower.maxY
         let similarSize = abs(upper.height - lower.height) <= height * 0.25
         let stacked = gap >= -height * 0.5 && gap <= height * 0.75
-        // Same left edge, or the upper line indented as a paragraph's first line.
+        // Same left edge, or the upper line indented as a paragraph's first line; or, for
+        // right-aligned and centred text, the same right edge or centre.
         let aligned = abs(upper.minX - lower.minX) <= height * 0.5
             || (upper.minX > lower.minX && upper.minX - lower.minX <= height * 3)
+            // Glyph edges are exact; ragged lines rarely share a right edge this closely.
+            || abs(upper.maxX - lower.maxX) <= 0.5
+            || abs(upper.midX - lower.midX) <= 0.5
         let overlap = min(upper.maxX, lower.maxX) - max(upper.minX, lower.minX)
         return similarSize && stacked && aligned && overlap > min(upper.width, lower.width) * 0.5
     }

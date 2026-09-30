@@ -78,7 +78,9 @@ struct NativeTextStyleTests {
             fallback: NSAttributedString(string: "Missing", attributes: [.font: fallbackFont]))
         #expect(result.fontSubstitutions.count == 1)
         #expect(result.fontSubstitutions.first?.contains("AnnotateNonexistentFace") == true)
-        #expect(result.fontSubstitutions.first?.contains("Helvetica") == true)
+        // The closest installed font by kind and glyph widths stands in, and is named.
+        let substitute = try #require(result.text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        #expect(result.fontSubstitutions.first?.contains(substitute.displayName ?? substitute.fontName) == true)
         #expect((result.text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 18)
     }
 

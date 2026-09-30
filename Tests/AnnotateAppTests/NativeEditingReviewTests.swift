@@ -63,6 +63,8 @@ struct NativeEditingReviewTests {
         let model = fixture.owner.model
         model.beginLiveText(replacingSelection: false)
         let session = try #require(model.liveEdit)
+        // New text starts in the nearest text's size and keeps it through every keystroke.
+        let startingSize = session.font.pointSize
         let field = try #require(fixture.view.liveTextView)
         fixture.window.makeFirstResponder(field)
         field.insertText("First", replacementRange: NSRange(location: 0, length: field.string.utf16.count))
@@ -74,7 +76,7 @@ struct NativeEditingReviewTests {
         #expect(session.text == "First again")
         #expect(field.selectedRange() == NSRange(location: 11, length: 0))
         #expect(model.pdfDocument?.findString("First again", withOptions: []).count == 1)
-        #expect(session.font.pointSize == 14)
+        #expect(session.font.pointSize == startingSize)
     }
 
     @Test("Sidebar typing and document undo restore a consistent saved PDF state")
