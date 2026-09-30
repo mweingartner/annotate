@@ -1,19 +1,27 @@
 # Annotate
 
-A native macOS PDF workspace for reading, live text editing, page organization, forms, signatures, conversion, OCR, and document conversations.
+A native macOS PDF workspace for reading, marking, editing in place, page organization, forms, signatures, conversion, OCR, and document conversations.
 
-![Annotate's reading guide and original marker workflow](Docs/Images/annotate-hero.jpg)
+![Annotate's reader: glass marker pins on the page and the annotations sidebar](Docs/Images/annotate-reader.jpg)
 
-*The original reading and marker surface. The reader now follows the macOS glass look: a unified toolbar, a sidebar of bookmarks and annotations, and editing directly on the page ([interface design](Docs/INTERFACE_DESIGN.md)).*
+*The reader follows the macOS glass look: a unified toolbar, a sidebar of bookmarks and annotations, and marker pins beside the passages they belong to ([interface design](Docs/INTERFACE_DESIGN.md)).*
 
 Annotate is written in Swift using Apple's SwiftUI, AppKit, PDFKit, Core Graphics, Core Text, Vision, FoundationModels, and Security frameworks. It has no third-party runtime dependencies, ads, account requirement, or export watermarks. PDF tools run locally. AI can use **local Ollama**, **OpenAI API**, **Claude API**, or **Apple Intelligence** when available.
+
+## Highlights
+
+- **Edit text where it is.** Click a paragraph and type. The edit is set exactly like the original: same font (or the closest installed match), baselines, margins, alignment and line breaks. It is saved as real, selectable PDF text.
+- **Minimal reflow.** When an edited paragraph gains or loses a line, only the content below it moves, by exactly that line, as far as the first gap that absorbs the change. Rules, images and annotations move with their text.
+- **Markers that read like margin notes.** Important, Revisit, Question, and Note markers with custom colors and icons, glass pins on the page, a sidebar to jump between them, and an annotated export with a notes-and-questions index.
+- **A full PDF workspace.** Reorder, insert, rotate, split and merge pages; create and fill forms; sign visibly or with a certificate; convert to 13 formats; OCR scans; export redacted copies.
+- **An assistant that shows its sources.** Ask, summarize, or translate with local or cloud models. Every answer links back to the pages and passages it used, and cloud requests are reviewed before they are sent.
 
 ## Work with PDFs
 
 | Tool | What it does |
 | --- | --- |
 | Read and mark | Bookmarks for pages and annotations for passages, shown as glass pins on the page and listed in the sidebar. Composable Important, Revisit, Question, and Note categories; custom colors/icons; exact passage navigation; contextual search; page thumbnails; readable note popovers. |
-| Edit | Click a paragraph to edit its text where it is, with a floating format bar; the inspector holds every control. Change installed font family/typeface, size, color, bold, italic, underline, alignment, letter/line/paragraph spacing, position, and dimensions for selected text runs. Select existing images to replace, remove, move, or resize their source content. Insert native text or images; add standard highlights, underlines, strikeouts, rectangles, and ellipses. |
+| Edit | Click a paragraph to edit its text where it is, with a floating format bar; the inspector holds every control. Edits keep the original's font, baselines, margins and alignment, and the content below moves only as much as the new text needs. Change installed font family/typeface, size, color, bold, italic, underline, alignment, letter/line/paragraph spacing, position, and dimensions for selected text runs. Select existing images to replace, remove, move, or resize their source content. Insert native text or images; add standard highlights, underlines, strikeouts, rectangles, and ellipses. |
 | Pages | Thumbnail navigation and drag reordering; accessible move buttons; insert PDFs, images, and blank pages; merge, rotate, delete, extract, and split. Marker references follow the pages. |
 | Forms | Create and fill text, checkbox, radio, dropdown, and list-box fields; use live text for noninteractive forms. |
 | Sign | Type, draw, or import a visible electronic signature; sign a copy with a certificate and validate signed files. |
@@ -23,9 +31,27 @@ Annotate is written in Swift using Apple's SwiftUI, AppKit, PDFKit, Core Graphic
 
 The [workspace design](Docs/WORKSPACE_DESIGN.md), [native text engine](Docs/NATIVE_TEXT_EDITING.md), [typography controls](Docs/TYPOGRAPHY_DESIGN.md), [conversion design](Docs/CONVERSION_DESIGN.md), [pages/forms design](Docs/PAGES_FORMS_DESIGN.md), and [assistant design](Docs/ASSISTANT_DESIGN.md) describe behavior and its practical limits. The [PDFgear comparison](Docs/PDFGEAR_RESEARCH.md) checks the requested reference against **10 original sources**, including contradictory marketing claims. Annotate does **not** claim complete PDFgear feature or fidelity parity.
 
-## Get started
+## Install
 
-Requires **macOS 26 or newer** to run. Building requires Swift 6.2+ with the **macOS 26.4 SDK or newer**. Development and runtime verification use **Xcode 27 / Swift 6.4 on Apple Silicon macOS 27**. Older eligible SDKs, macOS 26 runtime behavior, and Intel Macs require separate validation.
+Annotate runs on **macOS 26 or newer** on **Apple Silicon** Macs.
+
+### Download the app
+
+1. Download `Annotate-<version>-macOS-arm64.zip` from the [latest release](https://github.com/mweingartner/annotate/releases/latest).
+2. Open the zip and drag **Annotate.app** into your **Applications** folder.
+3. Open Annotate. Release builds are ad-hoc signed, not notarized by Apple, so the first launch is blocked with a message that Apple could not verify the app. Choose **Done**, then open **System Settings › Privacy & Security**, scroll to Security, and choose **Open Anyway** for Annotate. You only need to do this once.
+
+If you prefer the terminal, you can instead clear the download flag after copying the app, and then open it normally:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Annotate.app
+```
+
+Each release lists the zip's SHA-256 checksum; `shasum -a 256 Annotate-<version>-macOS-arm64.zip` should print the same value.
+
+### Build from source
+
+Building requires Swift 6.2+ with the **macOS 26.4 SDK or newer** (Xcode 26.4 or later). Development and runtime verification use **Xcode 27 / Swift 6.4 on Apple Silicon macOS 27**. Older eligible SDKs, macOS 26 runtime behavior, and Intel Macs require separate validation.
 
 ```sh
 git clone https://github.com/mweingartner/annotate.git
@@ -41,7 +67,11 @@ To build and install in `/Applications/Annotate.app`, quit Annotate normally, th
 ./Scripts/install.sh
 ```
 
-The installer retains a timestamped backup of the previous application under `build/`. Builds are locally ad-hoc signed, not notarized distribution releases. The application and automated tests are Swift; shell scripts invoke Apple's build and packaging tools.
+The installer keeps a timestamped backup of the previous application under `build/`. Builds you make yourself are signed for your Mac only and open without the Privacy & Security step. The application and automated tests are Swift; shell scripts invoke Apple's build and packaging tools.
+
+### Updating
+
+Quit Annotate, then replace the app in Applications with the newer download (or run `./Scripts/install.sh` again from an updated clone). Your PDFs, markers, and settings are kept: markers live inside the PDFs themselves, and API keys stay in your Keychain.
 
 ## Live editing and saving
 
