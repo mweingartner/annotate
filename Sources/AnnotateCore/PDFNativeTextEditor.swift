@@ -26,17 +26,29 @@ public enum PDFNativeTextError: LocalizedError, Equatable {
 public enum PDFNativeTextEditor {
     public static func replace(in document: PDFDocument, region: PageRegion, originalText: String,
                                replacement: NSAttributedString, destination: PageRegion? = nil) throws -> PDFDocument {
-        try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination, scanMode: false)
+        try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination,
+                           scanMode: false, reflow: nil).document
+    }
+
+    /// Replaces text and moves the content below it by the edit's change in height (see
+    /// `PDFNativeReflowRequest`), reporting what moved. Throws `PDFNativeReflowRefusal`
+    /// when the content can't be moved safely; nothing is changed then.
+    public static func replace(in document: PDFDocument, region: PageRegion, originalText: String, replacement: NSAttributedString,
+                               destination: PageRegion, reflow: PDFNativeReflowRequest?) throws -> (document: PDFDocument, moved: PDFNativeReflowResult?) {
+        try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination,
+                           scanMode: false, reflow: reflow)
     }
 
     /// Explicit scan mode edits only supported source image pixels and removes the matched OCR layer.
     public static func replaceScanned(in document: PDFDocument, region: PageRegion, originalText: String,
                                       replacement: NSAttributedString, destination: PageRegion? = nil) throws -> PDFDocument {
-        try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination, scanMode: true)
+        try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination,
+                           scanMode: true, reflow: nil).document
     }
 
     private static func replaceContent(in document: PDFDocument, region: PageRegion, originalText: String,
-                                       replacement: NSAttributedString, destination: PageRegion?, scanMode: Bool) throws -> PDFDocument {
+                                       replacement: NSAttributedString, destination: PageRegion?, scanMode: Bool,
+                                       reflow: PDFNativeReflowRequest?) throws -> (document: PDFDocument, moved: PDFNativeReflowResult?) {
         guard !document.isLocked, document.allowsDocumentChanges, document.allowsCopying else { throw PDFNativeTextError.permission }
         guard !document.isEncrypted else { throw PDFNativeTextError.unsupported("Native editing cannot preserve this document's encryption. Use an explicitly unencrypted working copy.") }
         guard let page = document.page(at: region.pageIndex), MarkerCodec.finite(region.bounds),
@@ -71,13 +83,29 @@ public enum PDFNativeTextEditor {
             if scanMode { try PDFNativeScanPatch.prepare(program: parsed, region: region.bounds, graph: graph) }
             program = parsed
         }
+        // Minimal reflow: the content below the paragraph moves by the change in height.
+        var moving: [Int: String] = [:], moved: PDFNativeReflowResult?
+        if let reflow, let program {
+            guard page.rotation % 360 == 0 else { throw PDFNativeReflowRefusal(message: "Content can't move on a rotated page.") }
+            do {
+                let units = try PDFNativeReflow.units(of: program)
+                let plan = try PDFNativeReflow.plan(reflow, units: units, page: page.bounds(for: .cropBox))
+                if !plan.moving.isEmpty {
+                    moving = try PDFNativeReflow.replacements(moving: plan.moving, units: units, offset: plan.offset,
+                                                              operations: program.operations, source: Array(program.data))
+                    moved = PDFNativeReflowResult(region: plan.region, offset: plan.offset)
+                }
+            } catch let refusal as PDFNativeReflow.Refusal {
+                throw PDFNativeReflowRefusal(message: refusal.message)
+            }
+        }
         let replacementReference = replacement.length > 0
             ? try makeReplacement(replacement, bounds: destination.bounds, media: page.bounds(for: .mediaBox), graph: graph) : nil
         let rewritten: Data
         var pageResources: [String: PDFNativeValue] = [:]
         if let program {
             let insertion = try replacementReference.map { try program.insertion(reference: $0) }
-            (rewritten, pageResources) = try program.rewritten(using: graph, insertion: insertion)
+            (rewritten, pageResources) = try program.rewritten(using: graph, insertion: insertion, moving: moving)
         } else {
             rewritten = data
             if let resources, case .dictionary(let values) = try graph.resolved(graph.importDictionary(resources)) { pageResources = values }
@@ -103,7 +131,7 @@ public enum PDFNativeTextEditor {
         guard let result = PDFDocument(data: output), result.pageCount == document.pageCount,
               let editedPage = result.page(at: region.pageIndex), editedPage.rotation == page.rotation,
               editedPage.bounds(for: .cropBox) == page.bounds(for: .cropBox) else { throw PDFNativeTextError.cannotWrite }
-        return result
+        return (result, moved)
     }
 
     private static func makeReplacement(_ replacement: NSAttributedString, bounds: CGRect, media: CGRect,

@@ -120,8 +120,13 @@ struct PDFNativeLexer {
     }
 }
 
+private let nativeNumberLocale = Locale(identifier: "en_US_POSIX")
 func nativePDFNumber(_ value: Double) -> String {
     guard value.isFinite else { return "0" }
-    return String(format: "%.8f", locale: Locale(identifier: "en_US_POSIX"), value).replacingOccurrences(of: #"\.?0+$"#, with: "", options: .regularExpression)
+    // Trailing zeros, and then a bare decimal point, are dropped: "12.50000000" is "12.5".
+    var text = String(format: "%.8f", locale: nativeNumberLocale, value)
+    while text.last == "0" { text.removeLast() }
+    if text.last == "." { text.removeLast() }
+    return text
 }
 func nativePDFHex(_ bytes: [UInt8]) -> String { "<" + bytes.map { String(format: "%02X", $0) }.joined() + ">" }

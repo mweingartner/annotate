@@ -25,11 +25,57 @@ final class LiveTextEdit {
     var bounds: CGRect {
         didSet {
             if geometryIsValid { appliedBounds = bounds }
+            // Settling after a reflow is not a change by hand (under @Observable, writing the
+            // backing storage runs this observer too).
+            guard !isSettling else { return }
+            // A block placed or sized by hand keeps that geometry: the edit stops moving the
+            // content below and no longer resizes itself to its text.
+            reflowGap = nil
             changed()
         }
     }
     private(set) var appliedBounds: CGRect
     private let pageBounds: CGRect?
+    /// The block as the edit began: the height minimal reflow measures its change from.
+    let originalBounds: CGRect
+    /// The smallest gap to leave between moved content and what follows (the paragraph's
+    /// line pitch), or nil when this edit doesn't move the content below it.
+    @ObservationIgnored var reflowGap: Double?
+    /// What the page on show has moved to make room, measured from the original page.
+    @ObservationIgnored var lastReflow: PDFNativeReflowResult?
+    /// Why the content below could not move, when the text needs room it can't have.
+    var reflowRefusal: String?
+    /// The original text's own height in its block, which every change is measured from.
+    @ObservationIgnored private(set) var reflowBaseHeight: Double?
+
+    /// Lets the edit move the content below it. Changes in height are measured from the
+    /// original text's own height, so an edit that keeps the line count moves nothing.
+    func enableReflow(minimumGap: Double) {
+        guard minimumGap.isFinite, minimumGap > 0, let fitted = heightFittedBounds() else { return }
+        reflowBaseHeight = fitted.height
+        reflowGap = minimumGap
+    }
+
+    /// The original block, taller or shorter by exactly the change in the text's height,
+    /// with its top fixed; nil when the text can't be measured or leaves the page.
+    func reflowedBounds() -> CGRect? {
+        guard let base = reflowBaseHeight, let fitted = heightFittedBounds() else { return nil }
+        let height = originalBounds.height + fitted.height - base
+        let block = CGRect(x: originalBounds.minX, y: originalBounds.maxY - height, width: originalBounds.width, height: height)
+        guard height.isFinite, height >= fitted.height - 0.01, pageBounds?.contains(block) ?? true else { return nil }
+        return block
+    }
+
+    /// Takes a new size after the content below has moved to make room, without
+    /// announcing a change (the page already shows the text at this size).
+    func settleBounds(_ fitted: CGRect) {
+        guard fitted != appliedBounds else { return }
+        isSettling = true
+        defer { isSettling = false }
+        bounds = fitted
+        appliedBounds = fitted
+    }
+    @ObservationIgnored private var isSettling = false
     @ObservationIgnored var needsUndoCheckpoint = false
     @ObservationIgnored var changed: () -> Void = {}
     @ObservationIgnored var selectionChanged: () -> Void = {}
@@ -54,6 +100,7 @@ final class LiveTextEdit {
         defaultColor = color
         self.bounds = bounds
         appliedBounds = bounds
+        originalBounds = bounds
         self.pageBounds = pageBounds
         let initial = attributedText ?? NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
         self.attributedText = NSAttributedString(attributedString: initial)

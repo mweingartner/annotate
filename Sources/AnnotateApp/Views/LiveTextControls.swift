@@ -101,7 +101,7 @@ struct LiveTextControls: View {
             if session.nativeUpdateFailed, session.textOverflows {
                 // One place for the problem: the block shows an overflow mark on the page.
                 StatusBadge("Text doesn’t fit", kind: .caution)
-                Text("Make the block taller, make the text smaller, or remove some words.")
+                Text(session.reflowRefusal ?? "Make the block taller, make the text smaller, or remove some words.")
                     .font(Typography.supporting)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

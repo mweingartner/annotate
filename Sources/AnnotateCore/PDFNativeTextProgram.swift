@@ -248,8 +248,10 @@ final class PDFNativeTextProgram {
         throw PDFNativeTextError.sourceMismatch
     }
 
-    @MainActor func rewritten(using graph: PDFNativeObjectGraph, insertion: PDFNativeInsertion? = nil) throws -> (Data, [String: PDFNativeValue]) {
-        var replacements: [Int: String] = [:]
+    @MainActor func rewritten(using graph: PDFNativeObjectGraph, insertion: PDFNativeInsertion? = nil,
+                              moving: [Int: String] = [:]) throws -> (Data, [String: PDFNativeValue]) {
+        // Operators rewritten to move content (minimal reflow) never touch edited text.
+        var replacements: [Int: String] = moving
         var resourceValues: [String: PDFNativeValue] = [:]
         if let resources, case .dictionary(let values) = try graph.resolved(graph.importDictionary(resources)) { resourceValues = values }
         if let insertion, insertion.target === self {
@@ -260,6 +262,7 @@ final class PDFNativeTextProgram {
             objects[name] = insertion.reference; resourceValues["XObject"] = .dictionary(objects)
             let matrix = insertion.transform
             let values = [matrix.a, matrix.b, matrix.c, matrix.d, matrix.tx, matrix.ty].map { nativePDFNumber($0) }.joined(separator: " ")
+            guard moving[insertion.after] == nil else { throw PDFNativeTextError.unsupported("The edited text shares a drawing unit with content that has to move.") }
             replacements[insertion.after] = "ET\nq \(values) cm /\(name) Do Q\n"
         }
         for (index, image) in images {

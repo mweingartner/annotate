@@ -82,6 +82,20 @@ struct ParagraphTextPropertyTests {
         #expect(ParagraphText.paragraphRange(around: 6, in: lines) == 6...6)
     }
 
+    @Test("Paragraph spacing smaller than a line still separates paragraphs, as in a justified text set with 6 pt between paragraphs")
+    func paragraphSpacing() {
+        // Lines 19 pt apart; the paragraphs 25 pt apart, a gap of about 10.6 pt, under a line height.
+        let tops: [CGFloat] = [705.2, 686.2, 667.2, 642.2, 623.2, 588.2, 569.2]
+        let lines = tops.enumerated().map { CGRect(x: 90, y: $1, width: [2, 4, 6].contains($0) ? 300 : 432, height: 14.4) }
+        #expect(ParagraphText.paragraphRange(around: 1, in: lines) == 0...2)
+        #expect(ParagraphText.paragraphRange(around: 2, in: lines) == 0...2)
+        #expect(ParagraphText.paragraphRange(around: 3, in: lines) == 3...4)
+        #expect(ParagraphText.paragraphRange(around: 6, in: lines) == 5...6)
+        // Even line pitch keeps a paragraph whole.
+        let even = (0..<5).map { CGRect(x: 90, y: 700 - CGFloat($0) * 19, width: 432, height: 14.4) }
+        #expect(ParagraphText.paragraphRange(around: 2, in: even) == 0...4)
+    }
+
     @Test("A paragraph on a rotated page is the same paragraph: rotation is display only")
     func rotatedPage() throws {
         let pdf = SamplePDF.make()
@@ -391,7 +405,7 @@ struct ParagraphTextPropertyTests {
         }
     }
 
-    @Test("Fuzz: paragraph ranges never trap, contain their line, stay in bounds, and are maximal chains",
+    @Test("Fuzz: paragraph ranges never trap, contain their line, stay in bounds, and end at a break or wider spacing",
           arguments: Array(UInt64(1)...UInt64(400)))
     func paragraphRangeFuzz(seed: UInt64) {
         var generator = SeededGenerator(seed: seed)
@@ -404,10 +418,18 @@ struct ParagraphTextPropertyTests {
             #expect(ParagraphText.paragraphRange(around: index, in: lines) == range, "Deterministic: \(context)")
             // Every line of a paragraph finds the same paragraph.
             for member in range { #expect(ParagraphText.paragraphRange(around: member, in: lines) == range, "\(context)") }
-            // Neighbours inside continue; the lines just outside do not.
+            // Neighbours inside continue; the lines just outside either do not, or sit a
+            // wider step away than any two lines inside (paragraph spacing).
             for member in range.dropLast() { #expect(ParagraphText.continues(lines[member], into: lines[member + 1]), "\(context)") }
-            if range.lowerBound > 0 { #expect(!ParagraphText.continues(lines[range.lowerBound - 1], into: lines[range.lowerBound]), "\(context)") }
-            if range.upperBound < lines.count - 1 { #expect(!ParagraphText.continues(lines[range.upperBound], into: lines[range.upperBound + 1]), "\(context)") }
+            func step(_ upper: Int) -> CGFloat { lines[upper].midY - lines[upper + 1].midY }
+            let widest = range.dropLast().map(step).max() ?? -.infinity
+            if range.lowerBound > 0 {
+                let outside = range.lowerBound - 1
+                #expect(!ParagraphText.continues(lines[outside], into: lines[outside + 1]) || !step(outside).isFinite || step(outside) > widest, "\(context)")
+            }
+            if range.upperBound < lines.count - 1 {
+                #expect(!ParagraphText.continues(lines[range.upperBound], into: lines[range.upperBound + 1]) || !step(range.upperBound).isFinite || step(range.upperBound) > widest, "\(context)")
+            }
         }
     }
 

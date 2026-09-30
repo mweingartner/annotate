@@ -41,7 +41,17 @@ enum ParagraphText {
         var first = index, last = index
         while first > 0, continues(lines[first - 1], into: lines[first]) { first -= 1 }
         while last < lines.count - 1, continues(lines[last], into: lines[last + 1]) { last += 1 }
-        return first...last
+        guard last - first >= 2 else { return first...last }
+        // Paragraph spacing: a step between lines clearly wider than the run's line pitch
+        // starts a new paragraph, even when the gap is less than a line.
+        func step(_ upper: Int) -> CGFloat { lines[upper].midY - lines[upper + 1].midY }
+        guard let pitch = (first..<last).map(step).filter(\.isFinite).min(),
+              let height = (first...last).map({ lines[$0].height }).filter(\.isFinite).max() else { return first...last }
+        let tolerance = max(1.5, height * 0.2)
+        var top = index, bottom = index
+        while top > first, step(top - 1) <= pitch + tolerance { top -= 1 }
+        while bottom < last, step(bottom) <= pitch + tolerance { bottom += 1 }
+        return top...bottom
     }
 
     /// Whether `lower` reads as the next line of the same paragraph as `upper`.

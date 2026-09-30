@@ -138,7 +138,7 @@ struct ParagraphEditingTests {
         #expect(owner.model.pdfDocument?.string?.contains("third") == true)
     }
 
-    @Test("Text that outgrows its block never grows over the text below; the overflow is reported")
+    @Test("Text that outgrows its block pushes the text below down by the added line, never over it")
     func neverCoversText() throws {
         let (owner, view, window) = try editingFixture("Original sentence remains selectable.\nNeighboring paragraph stays intact.")
         defer { owner.model.discardPendingLiveText(); window.close() }
@@ -147,9 +147,17 @@ struct ParagraphEditingTests {
         owner.model.beginLiveText(replacingSelection: true)
         let session = try #require(owner.model.liveEdit)
         let before = session.appliedBounds
+        let page = try #require(pdf.page(at: 0))
+        let neighbour = try #require(pdf.findString("Neighboring paragraph stays intact.", withOptions: []).first).bounds(for: page)
         session.text = "Original sentence remains selectable, and now it is long enough to wrap onto the line below it."
-        #expect(session.nativeUpdateFailed)
-        #expect(session.appliedBounds == before)
-        #expect(owner.model.pdfDocument?.findString("Neighboring paragraph stays intact.", withOptions: []).count == 1)
+        #expect(!session.nativeUpdateFailed, "\(session.nativeFailureMessage ?? "")")
+        // The block grew downward by a line, keeping its top…
+        #expect(session.appliedBounds.height > before.height)
+        #expect(abs(session.appliedBounds.maxY - before.maxY) < 0.01)
+        // …and the neighbouring paragraph moved down by the same amount, intact and clear of it.
+        let edited = try #require(owner.model.pdfDocument)
+        let moved = try #require(edited.findString("Neighboring paragraph stays intact.", withOptions: []).first).bounds(for: try #require(edited.page(at: 0)))
+        #expect(abs((neighbour.minY - moved.minY) - (session.appliedBounds.height - before.height)) < 0.5)
+        #expect(moved.maxY <= session.appliedBounds.minY + 0.5)
     }
 }

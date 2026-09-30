@@ -101,6 +101,11 @@ extension ReaderModel {
             }
             session.nativeOriginalRegion = region
             session.nativeOriginalText = replacingSelection ? text : ""
+            // Existing text set like the original moves what follows it when it gains or
+            // loses lines: by one line of the paragraph's pitch at least.
+            if replacingSelection, matched != nil, page.rotation % 360 == 0 {
+                session.enableReflow(minimumGap: nativeStyle?.layout?.linePitch ?? Double(font.ascender - font.descender + font.leading))
+            }
             session.needsUndoCheckpoint = true
             startLiveSession(session)
             if !replacingSelection { updateLiveText() }
@@ -156,19 +161,41 @@ extension ReaderModel {
         guard !isProcessing, let edit = liveEdit, !edit.isApplyingNativeUpdate,
               let source = edit.nativeSource, let region = edit.nativeOriginalRegion,
               let document = pdfDocument, !document.isLocked, document.allowsDocumentChanges else { return }
-        // Growing re-enters this method through the block's change handler, which
-        // applies the text at the new size.
-        if growIntoEmptySpace(edit, on: document.page(at: edit.pageIndex)) { return }
+        // Without reflow, growing re-enters this method through the block's change
+        // handler, which applies the text at the new size.
+        if edit.reflowGap == nil, growIntoEmptySpace(edit, on: document.page(at: edit.pageIndex)) { return }
         let editorHadFocus = pdfView?.window?.firstResponder === pdfView?.liveTextView
         edit.isApplyingNativeUpdate = true
         defer { edit.isApplyingNativeUpdate = false }
         do {
-            synchronizeNativeFields(into: source, from: document)
+            synchronizeNativeFields(into: source, from: document, reflowed: edit.lastReflow)
             let destination = PageRegion(pageIndex: edit.pageIndex, bounds: edit.appliedBounds)
-            let result: PDFDocument
+            var result: PDFDocument
+            var moved: PDFNativeReflowResult?
+            // A reason from an earlier keystroke no longer applies unless reflow refuses again.
+            edit.reflowRefusal = nil
             if edit.usesScannedTextEditing {
                 result = try PDFNativeTextEditor.replaceScanned(in: source, region: region,
                     originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination)
+            } else if let gap = edit.reflowGap, let fitted = edit.reflowedBounds(),
+                      abs(fitted.height - edit.originalBounds.height) > 0.5 || abs(fitted.height - edit.appliedBounds.height) > 0.5 {
+                // Minimal reflow: the block hugs its text, and the content below moves by
+                // exactly the change in height, as far as the first gap that absorbs it.
+                do {
+                    let delta = fitted.height - edit.originalBounds.height
+                    (result, moved) = try PDFNativeTextEditor.replace(in: source, region: region, originalText: edit.nativeOriginalText,
+                        replacement: edit.attributedText, destination: PageRegion(pageIndex: edit.pageIndex, bounds: fitted),
+                        reflow: abs(delta) > 0.5 ? PDFNativeReflowRequest(delta: delta, block: edit.originalBounds, minimumGap: gap) : nil)
+                    if let moved { try moveAnnotations(in: result, pageIndex: edit.pageIndex, region: moved.region, offset: moved.offset) }
+                    edit.settleBounds(fitted)
+                    edit.reflowRefusal = nil
+                } catch let refusal as PDFNativeReflowRefusal {
+                    // Nothing moved. The text keeps its block and, if it doesn't fit, is shown
+                    // with the overflow mark and this reason.
+                    edit.reflowRefusal = refusal.message
+                    result = try PDFNativeTextEditor.replace(in: source, region: region,
+                        originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination)
+                }
             } else {
                 result = try PDFNativeTextEditor.replace(in: source, region: region,
                     originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination)
@@ -181,6 +208,7 @@ extension ReaderModel {
                 edit.needsUndoCheckpoint = false
             }
             edit.nativeUpdateFailed = false
+            edit.lastReflow = moved
             if let message = edit.nativeFailureMessage, errorMessage?.hasPrefix(message) == true { errorMessage = nil }
             if edit.geometryIsValid, errorMessage?.hasPrefix("Keep the text block inside") == true { errorMessage = nil }
             edit.nativeFailureMessage = nil
@@ -221,13 +249,43 @@ extension ReaderModel {
         } catch {
             if case PDFNativeTextError.scannedText = error { edit.canEditScannedText = true }
             edit.nativeUpdateFailed = true
-            edit.nativeFailureMessage = error.localizedDescription
+            // Text that needs room the content below can't give says why.
+            if error as? PDFNativeTextError == .replacementDoesNotFit, let reason = edit.reflowRefusal {
+                edit.nativeFailureMessage = reason
+            } else {
+                edit.nativeFailureMessage = error.localizedDescription
+            }
             // Text that doesn't fit shows on the page (an overflow mark on the block) and in
             // the inspector; other failures also need the banner.
             if error as? PDFNativeTextError != .replacementDoesNotFit {
                 errorMessage = error.localizedDescription + " Your pending text remains in the editor; it has not been saved over the PDF."
             }
             pdfView?.refreshLiveEditor()
+        }
+    }
+
+    /// Moves the page's annotations over content that reflow moved: markers keep their
+    /// saved regions in step, and links, notes and markup follow their text.
+    func moveAnnotations(in document: PDFDocument, pageIndex: Int, region: CGRect, offset: Double) throws {
+        guard let page = document.page(at: pageIndex), offset.isFinite, !region.isNull else { return }
+        let area = region.insetBy(dx: -1, dy: -1)
+        func inside(_ rect: CGRect) -> Bool { area.contains(CGPoint(x: rect.midX, y: rect.midY)) }
+        // Markers: regions on this page within the moved content move; the codec rewrites
+        // their annotations and metadata together.
+        for marker in MarkerCodec.markers(in: document) {
+            let regions = marker.regions.map { region -> PageRegion in
+                guard region.pageIndex == pageIndex, inside(region.bounds) else { return region }
+                return PageRegion(pageIndex: pageIndex, bounds: region.bounds.offsetBy(dx: 0, dy: offset))
+            }
+            guard regions != marker.regions else { continue }
+            var moved = marker
+            moved.regions = regions
+            try MarkerCodec.apply(moved, to: document)
+        }
+        // Everything else that sits on moved content.
+        for annotation in page.annotations
+        where annotation.value(forAnnotationKey: MarkerCodec.ownerKey) as? String != MarkerCodec.ownerValue && inside(annotation.bounds) {
+            annotation.bounds = annotation.bounds.offsetBy(dx: 0, dy: offset)
         }
     }
 

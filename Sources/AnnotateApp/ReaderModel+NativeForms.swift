@@ -20,13 +20,19 @@ extension ReaderModel {
     /// Native PDFKit widgets can still receive focus while an overflowing text edit
     /// remains pending. Carry their current values into the immutable text source
     /// before rebuilding its content, including radio groups and shared fields.
-    func synchronizeNativeFields(into source: PDFDocument, from current: PDFDocument) {
+    /// Widgets that reflow moved are matched at the place they came from.
+    func synchronizeNativeFields(into source: PDFDocument, from current: PDFDocument, reflowed: PDFNativeReflowResult? = nil) {
         var checkedButtons: [PDFAnnotation] = []
         for index in 0..<min(source.pageCount, current.pageCount) {
             let sourceWidgets = (source.page(at: index)?.annotations ?? []).filter { $0.type == "Widget" }
             for widget in current.page(at: index)?.annotations ?? [] where widget.type == "Widget" {
+                var bounds = widget.bounds
+                if let reflowed, !reflowed.region.isNull {
+                    let original = bounds.offsetBy(dx: 0, dy: -reflowed.offset)
+                    if reflowed.region.insetBy(dx: -1, dy: -1).contains(CGPoint(x: original.midX, y: original.midY)) { bounds = original }
+                }
                 guard let target = sourceWidgets.first(where: {
-                    $0.fieldName == widget.fieldName && $0.bounds == widget.bounds && $0.widgetFieldType == widget.widgetFieldType
+                    $0.fieldName == widget.fieldName && $0.bounds.matches(bounds) && $0.widgetFieldType == widget.widgetFieldType
                 }) else { continue }
                 if widget.widgetFieldType == .button {
                     target.buttonWidgetStateString = widget.buttonWidgetStateString
@@ -72,5 +78,13 @@ extension ReaderModel {
         for index in Set(fields.map(\.pageIndex)) {
             if let page = document.page(at: index) { pdfView?.annotationsChanged(on: page) }
         }
+    }
+}
+
+private extension CGRect {
+    /// The same rectangle, allowing for rounding in a move there and back.
+    func matches(_ other: CGRect) -> Bool {
+        abs(minX - other.minX) < 0.01 && abs(minY - other.minY) < 0.01
+            && abs(width - other.width) < 0.01 && abs(height - other.height) < 0.01
     }
 }
