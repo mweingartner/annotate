@@ -1,80 +1,68 @@
-import SwiftUI
 import AnnotateCore
+import Atrium
+import SwiftUI
 
+/// The body of the marker inspector: the passage, what kind of marker it is, how it
+/// looks on the page, and the reader's own words. Space and labels group it; no boxes.
 struct MarkerDraftEditor: View {
-    @Environment(\.colorSchemeContrast) private var contrast
     @Bindable var draft: MarkerDraft
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                if !draft.quote.isEmpty {
-                    VStack(alignment: .leading, spacing: ReaderStyle.compactSpacing) {
-                        Text("SELECTED PASSAGE")
-                            .font(.caption)
-                            .tracking(1)
-                            .foregroundStyle(.secondary)
-                        Text(draft.quote)
-                            .font(.body)
-                            .fontDesign(.serif)
-                            .lineLimit(7)
-                            .textSelection(.enabled)
-                            .help(draft.quote)
-                            .padding(.leading, 12)
-                            .overlay(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(draft.color)
-                                    .frame(width: 3)
-                            }
+        VStack(alignment: .leading, spacing: 0) {
+            if !draft.quote.isEmpty {
+                Text(draft.quote)
+                    .font(Typography.body)
+                    .lineLimit(7)
+                    .textSelection(.enabled)
+                    .help(draft.quote)
+                    .padding(.leading, Spacing.control)
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(draft.color).frame(width: Spacing.tight)
                     }
+                    .padding(.bottom, Spacing.section)
+                    .accessibilityLabel("Selected passage: \(draft.quote)")
+            }
+
+            PageSection("Keep As") {
+                Grid(alignment: .leading, horizontalSpacing: Spacing.group, verticalSpacing: Spacing.snug) {
+                    GridRow { toggle(.important); toggle(.revisit) }
+                    GridRow { toggle(.question); toggle(.note) }
                 }
-
-                VStack(alignment: .leading, spacing: ReaderStyle.compactSpacing) {
-                    Text("Keep it as…")
-                        .font(.headline)
-                    Text("Choose one or more categories.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: ReaderStyle.compactSpacing) {
-                        ForEach([MarkerCategory.important, .revisit, .question, .note], id: \.self) { category in
-                            MarkerCategoryToggle(draft: draft, category: category)
-                        }
-                    }
-                }
-
-                MarkerColorPicker(draft: draft)
-                MarkerIconPicker(draft: draft)
-
-                VStack(alignment: .leading, spacing: ReaderStyle.compactSpacing) {
-                    Label("Your note", systemImage: "note.text")
-                        .font(.headline)
-                    TextField("What would you like to remember?", text: $draft.note, axis: .vertical)
-                        .lineLimit(3...8)
-                        .textFieldStyle(.plain)
-                        .padding(12)
-                        .background(.background, in: .rect(cornerRadius: 9))
-                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1) }
-                        .accessibilityLabel("Annotation note")
-                }
-
-                VStack(alignment: .leading, spacing: ReaderStyle.compactSpacing) {
-                    Label("Your question", systemImage: "questionmark.bubble")
-                        .font(.headline)
-                    TextField("What do you want to explore?", text: $draft.question, axis: .vertical)
-                        .lineLimit(2...6)
-                        .textFieldStyle(.plain)
-                        .padding(12)
-                        .background(.background, in: .rect(cornerRadius: 9))
-                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1) }
-                        .accessibilityLabel("Annotation question")
-                }
-
-                Text("Notes and questions join their lists automatically. You can return to this passage from any of its categories.")
-                    .font(.callout)
+                Text("Choose one or more. Notes and questions join their lists on their own.")
+                    .font(Typography.supporting)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Spacing.snug)
             }
-            .padding(ReaderStyle.panelPadding)
+
+            PageSection("Look") {
+                MarkerColorPicker(draft: draft)
+                MarkerIconPicker(draft: draft)
+                    .padding(.top, Spacing.control)
+            }
+
+            PageSection("Note") {
+                TextField("What would you like to remember?", text: $draft.note, axis: .vertical)
+                    .lineLimit(3...8)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Marker note")
+            }
+
+            PageSection("Question") {
+                TextField("What do you want to explore?", text: $draft.question, axis: .vertical)
+                    .lineLimit(2...6)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Marker question")
+            }
         }
+    }
+
+    private func toggle(_ category: MarkerCategory) -> some View {
+        Toggle(isOn: Binding(get: { draft.categories.contains(category) },
+                             set: { if $0 { draft.categories.insert(category) } else { draft.categories.remove(category) } })) {
+            Label(category.title, systemImage: category.symbol)
+        }
+        .toggleStyle(.checkbox)
+        .accessibilityHint("A marker can belong to more than one category")
     }
 }

@@ -1,5 +1,7 @@
+import Atrium
 import SwiftUI
 
+/// The current font family as a button that opens a searchable list of installed families.
 struct FontFamilyPicker: View {
     let font: NSFont
     let choose: (NSFont) -> Void
@@ -9,35 +11,35 @@ struct FontFamilyPicker: View {
 
     var body: some View {
         Button(action: showFonts) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Font family").font(.caption).foregroundStyle(.secondary)
-                    Text(FontCatalog.displayName(for: FontCatalog.family(of: font))).font(.body).lineLimit(1)
+            HStack(spacing: Spacing.snug) {
+                VStack(alignment: .leading, spacing: Spacing.hair) {
+                    Text("Font family").font(Typography.meta).foregroundStyle(.secondary)
+                    Text(FontCatalog.displayName(for: FontCatalog.family(of: font))).font(Typography.body).lineLimit(1)
                 }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength: Spacing.tight)
+                Image(systemName: "chevron.up.chevron.down").font(Typography.meta).foregroundStyle(.secondary)
             }
-            .padding(.vertical, 5)
+            .padding(.vertical, Spacing.tight)
         }
         .buttonStyle(.bordered)
         .accessibilityLabel("Font family, \(FontCatalog.displayName(for: FontCatalog.family(of: font)))")
         .popover(isPresented: $isPresented, arrowEdge: .leading) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Choose a font").font(.headline)
+            VStack(alignment: .leading, spacing: Spacing.control) {
+                Text("Choose a font").font(Typography.heading)
                 TextField("Search font families", text: $query)
                     .textFieldStyle(.roundedBorder).focused($searchFocused)
                     .accessibilityLabel("Search installed font families")
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: Spacing.hair) {
                         ForEach(matchingFamilies, id: \.self) { family in
                             FontFamilyRow(family: family, selected: family == FontCatalog.family(of: font)) { select(family) }
                         }
                     }
                 }
-                if matchingFamilies.isEmpty { Text("No matching fonts").foregroundStyle(.secondary) }
+                if matchingFamilies.isEmpty { Text("No matching fonts").font(Typography.supporting).foregroundStyle(.secondary) }
             }
-            .padding(14)
-            .frame(width: 300, height: 360)
+            .padding(Spacing.group)
+            .frame(width: Metrics.inspector.ideal, height: Metrics.inspector.max)
             .onAppear { searchFocused = true }
         }
     }

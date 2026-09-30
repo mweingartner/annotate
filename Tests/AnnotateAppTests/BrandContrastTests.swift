@@ -1,27 +1,31 @@
 import AppKit
 import SwiftUI
 import Testing
+import Atrium
 @testable import AnnotateApp
 
-@Suite("Reader contrast", .serialized)
+@Suite("Brand colour contrast", .serialized)
 @MainActor
-struct ReaderStyleTests {
-    @Test("Accent text is legible in standard and increased-contrast appearances", arguments: [
+struct BrandContrastTests {
+    @Test("Lagoon text on the welcome page is legible in standard and increased-contrast appearances", arguments: [
         NSAppearance.Name.aqua, .darkAqua,
         .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua
     ])
     func accentContrast(appearanceName: NSAppearance.Name) throws {
         let appearance = try #require(NSAppearance(named: appearanceName))
         appearance.performAsCurrentDrawingAppearance {
-            let foreground = NSColor(ReaderStyle.accent)
+            let foreground = NSColor(Palette.accentText)
             #expect(contrast(foreground, .controlBackgroundColor) >= 4.5)
             #expect(contrast(foreground, .windowBackgroundColor) >= 4.5)
         }
     }
 
-    @Test("Primary action fill supports white labels with strong contrast")
-    func actionContrast() {
-        #expect(contrast(.white, NSColor(ReaderStyle.actionFill)) >= 7)
+    @Test("The Lagoon button fill carries white labels", arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func actionContrast(appearanceName: NSAppearance.Name) throws {
+        let appearance = try #require(NSAppearance(named: appearanceName))
+        appearance.performAsCurrentDrawingAppearance {
+            #expect(contrast(.white, NSColor(Palette.accent)) >= 4.5)
+        }
     }
 
     private func contrast(_ first: NSColor, _ second: NSColor) -> Double {

@@ -1,8 +1,9 @@
-import SwiftUI
 import AnnotateCore
+import Atrium
+import SwiftUI
 
+/// One preset colour. The selected swatch carries a ring and a check mark, never colour alone.
 struct MarkerColorSwatch: View {
-    @Environment(\.colorSchemeContrast) private var contrast
     let markerColor: MarkerColor
     let name: String
     @Binding var selection: Color
@@ -11,30 +12,26 @@ struct MarkerColorSwatch: View {
     private var selected: Bool { selection == color }
 
     var body: some View {
-        Button(action: selectColor) {
+        Button { selection = color } label: {
             Circle()
                 .fill(color)
-                .stroke(ReaderStyle.outline(contrast: contrast), lineWidth: 1)
-                .frame(width: 25, height: 25)
+                .strokeBorder(.black.opacity(0.12), lineWidth: 0.5)
+                .frame(width: Metrics.minimumControl, height: Metrics.minimumControl)
                 .overlay {
                     if selected {
                         Image(systemName: "checkmark")
-                            .font(.caption.bold())
+                            .font(Typography.label)
                             .foregroundStyle(Color(nsColor: markerColor.readableInkColor))
-                            .accessibilityHidden(true)
                     }
                 }
-                .padding(3)
-                .overlay {
-                    Circle().stroke(selected ? Color.primary : .clear, lineWidth: 2)
-                }
-                .contentShape(.rect)
+                .padding(Spacing.hair)
+                .overlay { Circle().strokeBorder(selected ? Color.accentColor : .clear, lineWidth: Spacing.hair) }
+                .frame(width: Metrics.control, height: Metrics.control)
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .help(name)
-        .accessibilityLabel("\(name) highlight")
+        .accessibilityLabel(name)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
-
-    private func selectColor() { selection = color }
 }

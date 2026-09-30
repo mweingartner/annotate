@@ -1,5 +1,7 @@
+import Atrium
 import SwiftUI
 
+/// Where a signature or form field goes, as percentages of the visible page.
 struct SignaturePlacementFields: View {
     @Binding var left: Double
     @Binding var top: Double
@@ -7,9 +9,11 @@ struct SignaturePlacementFields: View {
     @Binding var height: Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Position and size (% of visible page)").font(.caption).foregroundStyle(.secondary)
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+        VStack(alignment: .leading, spacing: Spacing.snug) {
+            Text("Position and size (% of visible page)")
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Grid(alignment: .leading, horizontalSpacing: Spacing.snug, verticalSpacing: Spacing.snug) {
                 GridRow {
                     Text("Left")
                     TextField("Left %", value: $left, format: .number).accessibilityLabel("Left position percent")
@@ -22,7 +26,8 @@ struct SignaturePlacementFields: View {
                     Text("Height")
                     TextField("Height %", value: $height, format: .number).accessibilityLabel("Height percent")
                 }
-            }.font(.caption)
+            }
+            .font(Typography.supporting)
         }
     }
 }

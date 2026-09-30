@@ -1,7 +1,10 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// The Sign inspector: make a visible signature, place it, then optionally sign a copy
+/// with a certificate.
 struct SignaturesPanel: View {
     @Bindable var model: ReaderModel
     @State private var method = SignatureMethod.type
@@ -17,35 +20,51 @@ struct SignaturesPanel: View {
     @State private var useSelection = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Electronic signature").font(.title2.bold())
-            Picker("Signature method", selection: $method) {
-                ForEach(SignatureMethod.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented)
-            switch method {
-            case .type:
-                TextField("Type your name", text: $name)
-                    .accessibilityLabel("Typed signature")
-                Text(name.isEmpty ? "Your signature" : name)
-                    .font(.custom("SnellRoundhand", size: 30, relativeTo: .title)).frame(maxWidth: .infinity, minHeight: 90)
-                    .padding(8).background(.background, in: .rect(cornerRadius: 8))
-            case .draw:
-                SignatureDrawingPad(strokes: $strokes)
-                Button("Clear drawing", systemImage: "eraser") { strokes = [] }
-            case .image:
-                Button("Choose signature image…", systemImage: "photo", action: chooseImage)
-                if let image { Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 130).accessibilityLabel("Uploaded signature preview") }
+        VStack(alignment: .leading, spacing: 0) {
+            PageSection("Electronic signature") {
+                VStack(alignment: .leading, spacing: Spacing.control) {
+                    Picker("Signature method", selection: $method) {
+                        ForEach(SignatureMethod.allCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented)
+                    switch method {
+                    case .type:
+                        TextField("Type your name", text: $name)
+                            .accessibilityLabel("Typed signature")
+                        Text(name.isEmpty ? "Your signature" : name)
+                            .font(.custom("SnellRoundhand", size: 30, relativeTo: .title))
+                            .frame(maxWidth: .infinity, minHeight: Metrics.doubleRow * 2)
+                            .padding(Spacing.snug)
+                            .background(.background, in: .rect(cornerRadius: Radius.field))
+                            .overlay { RoundedRectangle(cornerRadius: Radius.field).strokeBorder(Palette.hairline) }
+                    case .draw:
+                        SignatureDrawingPad(strokes: $strokes)
+                        Button("Clear drawing", systemImage: "eraser") { strokes = [] }
+                    case .image:
+                        Button("Choose signature image…", systemImage: "photo", action: chooseImage)
+                        if let image {
+                            Image(nsImage: image).resizable().scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: SignatureDrawingPad.height)
+                                .accessibilityLabel("Uploaded signature preview")
+                        }
+                    }
+                }
             }
-            Toggle("Current page only", isOn: $currentOnly)
-            if !currentOnly { TextField("Pages: all, 1, 3–5", text: $range) }
-            Toggle("Use selected PDF area when available", isOn: $useSelection).font(.caption)
+            PageSection("Placement") {
+                VStack(alignment: .leading, spacing: Spacing.control) {
+                    Toggle("Current page only", isOn: $currentOnly)
+                    if !currentOnly { TextField("Pages: all, 1, 3–5", text: $range) }
+                    Toggle("Use selected PDF area when available", isOn: $useSelection)
                     Button(model.selectingToolArea ? "Cancel area selection" : "Draw an area on the PDF", systemImage: "selection.pin.in.out") { model.selectingToolArea.toggle() }
-            SignaturePlacementFields(left: $left, top: $top, width: $width, height: $height)
-            Text("Drag an area on the PDF, or enter position and size above before placing.").font(.caption).foregroundStyle(.secondary)
-            Button("Place signature", systemImage: "signature", action: place).buttonStyle(.borderedProminent)
-            Divider()
-            Text("A visible signature is placed on the page. To protect the finished document with a certificate, sign a copy below.")
-                .font(.caption).foregroundStyle(.secondary)
+                    SignaturePlacementFields(left: $left, top: $top, width: $width, height: $height)
+                    Text("Drag an area on the PDF, or enter position and size above before placing.")
+                        .font(Typography.supporting).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Place signature", systemImage: "signature", action: place).buttonStyle(.borderedProminent)
+                    Text("A visible signature is placed on the page. To protect the finished document with a certificate, sign a copy below.")
+                        .font(Typography.supporting).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             CertificateSignaturePanel(model: model)
         }
         .disabled(model.isProcessing)

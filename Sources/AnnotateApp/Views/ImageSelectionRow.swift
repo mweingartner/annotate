@@ -1,7 +1,9 @@
 import AnnotateCore
 import AppKit
+import Atrium
 import SwiftUI
 
+/// One source image on the page: a preview, its pixel size, and a check when selected.
 struct ImageSelectionRow: View {
     @Bindable var model: ReaderModel
     let image: PDFNativeImage
@@ -16,31 +18,32 @@ struct ImageSelectionRow: View {
         Button {
             model.selectImage(image, preview: preview)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: Spacing.snug) {
                 Group {
                     if let preview { Image(nsImage: preview).resizable().scaledToFit() }
                     else { Image(systemName: "photo").foregroundStyle(.gray) }
                 }
-                .frame(width: 64, height: 48)
-                .background(.white, in: RoundedRectangle(cornerRadius: 4))
+                .frame(width: Metrics.control * 2, height: Metrics.doubleRow)
+                // The preview is page content, so it sits on paper in either appearance.
+                .background(.white, in: .rect(cornerRadius: Radius.badge))
                 .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Image \(number)").font(.callout.weight(.medium))
+                VStack(alignment: .leading, spacing: Spacing.hair) {
+                    Text("Image \(number)").font(Typography.body)
                     Text("\(pixelWidth) × \(pixelHeight) pixels")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Typography.meta).foregroundStyle(.secondary)
                     if !image.canTransform {
-                        Text("Replace or remove in place").font(.caption2).foregroundStyle(.secondary)
+                        Text("Replace or remove in place").font(Typography.meta).foregroundStyle(.secondary)
                     }
                 }
                 Spacer(minLength: 0)
                 if isSelected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
             }
-            .padding(8)
+            .padding(.vertical, Spacing.tight)
             .contentShape(.rect)
-            .background(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.05),
-                        in: RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.quiet)
+        // Selection is the one persistent fill; hover and press washes come from the style.
+        .background(isSelected ? Color.accentColor.opacity(0.12) : .clear, in: .rect(cornerRadius: Radius.field))
         .disabled(model.isProcessing)
         .accessibilityLabel("Image \(number), \(pixelWidth) by \(pixelHeight) pixels")
         .accessibilityAddTraits(isSelected ? .isSelected : [])

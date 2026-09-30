@@ -1,52 +1,53 @@
 import AnnotateCore
+import Atrium
 import PDFKit
 import SwiftUI
 
+/// The Edit inspector. With no text open it explains how to start and holds the other
+/// editing tools; while text is being edited it holds that text's full formatting.
 struct EditPanel: View {
     @Bindable var model: ReaderModel
     @State private var ink = Color.black
-    @State private var showPlacement = false
-    @State private var showMarkup = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            if let session = model.liveEdit {
-                LiveTextControls(model: model, session: session)
-                    .id(session.identifier)
-            } else {
-                Text("Edit PDF").font(.title2.bold())
-                PDFTextActions(model: model)
-                    .disabled(model.hasPendingImageChanges)
-                Divider()
-                ImageWorkspace(model: model)
-                Divider()
-                DisclosureGroup("Choose an area", isExpanded: $showPlacement) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Place a new text box, image, or shape in the area you choose.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        AreaSelectionControls(model: model)
-                    }.padding(.top, 8)
+        if let session = model.liveEdit {
+            LiveTextControls(model: model, session: session)
+                .id(session.identifier)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                PageSection("Text") {
+                    PDFTextActions(model: model)
+                        .disabled(model.hasPendingImageChanges)
                 }
-                Button("Insert image…", systemImage: "photo.badge.plus", action: insertImage)
-                    .disabled(model.pdfDocument?.allowsDocumentChanges != true)
-                Divider()
-                DisclosureGroup("Markup & shapes", isExpanded: $showMarkup) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ColorPicker("Ink color", selection: $ink, supportsOpacity: false)
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                            PDFMarkupButton(model: model, title: "Highlight", icon: "highlighter", type: .highlight, color: ink)
-                            PDFMarkupButton(model: model, title: "Underline", icon: "underline", type: .underline, color: ink)
-                            PDFMarkupButton(model: model, title: "Strikeout", icon: "strikethrough", type: .strikeOut, color: ink)
-                            PDFMarkupButton(model: model, title: "Rectangle", icon: "rectangle", type: .square, color: ink)
-                            PDFMarkupButton(model: model, title: "Ellipse", icon: "oval", type: .circle, color: ink)
-                        }
+                PageSection("Images") {
+                    ImageWorkspace(model: model)
+                    Button("Insert Image…", systemImage: "photo.badge.plus", action: insertImage)
+                        .disabled(model.pdfDocument?.allowsDocumentChanges != true)
+                        .help("Place an image in the chosen area, or on the current page")
+                        .padding(.top, Spacing.snug)
+                }
+                PageSection("Area") {
+                    Text("Choose where a new text box or image goes.")
+                        .font(Typography.supporting)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, Spacing.snug)
+                    AreaSelectionControls(model: model)
+                }
+                PageSection("Markup") {
+                    ColorPicker("Ink color", selection: $ink, supportsOpacity: false)
+                        .padding(.bottom, Spacing.snug)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Metrics.inspector.min / 2), alignment: .leading)],
+                              alignment: .leading, spacing: Spacing.snug) {
+                        PDFMarkupButton(model: model, title: "Highlight", icon: "highlighter", type: .highlight, color: ink)
+                        PDFMarkupButton(model: model, title: "Underline", icon: "underline", type: .underline, color: ink)
+                        PDFMarkupButton(model: model, title: "Strikeout", icon: "strikethrough", type: .strikeOut, color: ink)
+                        PDFMarkupButton(model: model, title: "Rectangle", icon: "rectangle", type: .square, color: ink)
+                        PDFMarkupButton(model: model, title: "Ellipse", icon: "oval", type: .circle, color: ink)
                     }
-                    .padding(.top, 10)
                     .disabled(!model.canEdit)
                 }
             }
         }
-        .buttonStyle(.bordered)
     }
 
     private func insertImage() {

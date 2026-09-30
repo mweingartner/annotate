@@ -1,5 +1,6 @@
 import AnnotateCore
 import AppKit
+import Atrium
 import PDFKit
 import SwiftUI
 import Synchronization
@@ -71,11 +72,15 @@ final class AnnotateDocument: NSDocument {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 880),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
-        window.minSize = NSSize(width: 980, height: 660)
+        window.minSize = Metrics.mainWindow
         window.title = model.fileName
-        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
         window.isMovableByWindowBackground = false
-        window.contentViewController = NSHostingController(rootView: ReaderView(model: model))
+        // SwiftUI supplies the glass toolbar; NSDocument keeps the title, proxy icon and
+        // its "Edited" subtitle. The page position floats over the canvas instead.
+        let host = NSHostingController(rootView: ReaderView(model: model))
+        host.sceneBridgingOptions = [.toolbars]
+        window.contentViewController = host
         window.setContentSize(NSSize(width: 1320, height: 860))
         window.center()
         window.setFrameAutosaveName("AnnotateReader")

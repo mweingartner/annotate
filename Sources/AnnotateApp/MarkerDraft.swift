@@ -14,7 +14,7 @@ final class MarkerDraft {
     var regions: [PageRegion]
     var isEditing: Bool
 
-    init(id: UUID = UUID(), categories: Set<MarkerCategory> = [.important], color: Color = .yellow,
+    init(id: UUID = UUID(), categories: Set<MarkerCategory> = [.important], color: Color = Color(nsColor: MarkerColor.palette[0].nsColor),
          icon: String = "star.fill", quote: String, note: String = "", question: String = "",
          regions: [PageRegion], isEditing: Bool = false) {
         self.id = id; self.categories = categories; self.color = color; self.icon = icon

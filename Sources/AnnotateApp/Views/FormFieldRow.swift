@@ -1,6 +1,8 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// One interactive field: its name and page, its value control, and removal.
 struct FormFieldRow: View {
     @Bindable var model: ReaderModel
     let field: PDFFormField
@@ -8,18 +10,23 @@ struct FormFieldRow: View {
     @State private var checked = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
+        VStack(alignment: .leading, spacing: Spacing.snug) {
+            HStack(spacing: Spacing.snug) {
                 Button("\(field.name) • p. \(field.pageIndex + 1)") { model.goToPage(field.pageIndex + 1) }
-                    .buttonStyle(.plain).font(.subheadline.bold())
-                Spacer()
-                if field.readOnly { Image(systemName: "lock").accessibilityLabel("Read-only") }
+                    .buttonStyle(.quiet).font(Typography.heading)
+                Spacer(minLength: Spacing.snug)
                 Button("Remove \(field.name)", systemImage: "trash", role: .destructive) { model.removeFormField(field) }
-                    .labelStyle(.iconOnly).help("Remove field")
+                    .labelStyle(.iconOnly).buttonStyle(.quiet).help("Remove field")
+            }
+            if field.readOnly {
+                // Symbol and word, on its own line so a long field name keeps its room.
+                Label("Read-only", systemImage: "lock")
+                    .font(Typography.meta).foregroundStyle(.secondary)
+                    .accessibilityLabel("Read-only")
             }
             switch field.kind {
             case .text:
-                HStack {
+                HStack(spacing: Spacing.snug) {
                     TextField("Value", text: $value, axis: .vertical).lineLimit(1...5)
                         .accessibilityLabel("Value for \(field.name)")
                         .onSubmit(save)
@@ -45,8 +52,6 @@ struct FormFieldRow: View {
                 }.disabled(field.readOnly)
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
         .onAppear(perform: synchronize)
         .onChange(of: field) { synchronize() }
     }

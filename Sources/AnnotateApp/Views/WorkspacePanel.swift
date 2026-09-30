@@ -1,19 +1,25 @@
+import Atrium
 import SwiftUI
 
+/// The inspector for a workspace tool: a pane title, then the tool's controls.
 struct WorkspacePanel: View {
     @Bindable var model: ReaderModel
     let tool: WorkspaceTool
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label(tool.title, systemImage: tool.symbol).font(.headline)
-                Spacer()
-                Button("Close tool", systemImage: "xmark") {
-                    if model.finishLiveText() { model.activeTool = nil; model.selectingToolArea = false }
-                }.labelStyle(.iconOnly).buttonStyle(.borderless)
-            }.padding(16)
-            Divider()
-            ScrollView {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(Typography.title)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: Spacing.snug)
+                    Button("Close", systemImage: "xmark", action: model.closeActiveTool)
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.quiet)
+                        .help("Close \(tool.title) and return to reading")
+                }
+                .padding(.bottom, Spacing.group)
                 Group {
                     switch tool {
                     case .edit: EditPanel(model: model)
@@ -26,9 +32,14 @@ struct WorkspacePanel: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
             }
+            .padding(Spacing.group)
         }
-        .background(.background)
+        .scrollEdgeEffectStyle(.soft, for: .top)
+    }
+
+    private var title: String {
+        guard tool == .edit, let session = model.liveEdit else { return tool.title }
+        return session.isExistingContent ? "Edit Text" : "New Text"
     }
 }

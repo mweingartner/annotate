@@ -1,11 +1,13 @@
+import Atrium
 import SwiftUI
 
+/// Position and size of the text block's frame, in PDF points.
 struct LiveTextGeometryControls: View {
     @Bindable var session: LiveTextEdit
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.snug) {
+            Grid(alignment: .leading, horizontalSpacing: Spacing.snug, verticalSpacing: Spacing.snug) {
                 GridRow {
                     Text("X")
                     TextField("Horizontal position", value: $session.x, format: .number.precision(.fractionLength(0...1)))
@@ -22,12 +24,17 @@ struct LiveTextGeometryControls: View {
                     TextField("Height", value: $session.height, format: .number.precision(.fractionLength(0...1)))
                         .accessibilityLabel("Text box height in points")
                 }
-            }.font(.caption).textFieldStyle(.roundedBorder)
+            }.font(Typography.supporting).textFieldStyle(.roundedBorder)
             Text("PDF points, measured from the page’s lower-left corner.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if !session.geometryIsValid {
-                Label("Keep the box within the page with a positive width and height.", systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                Label {
+                    Text("Keep the box within the page with a positive width and height.").fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.Status.caution)
+                }
+                .font(Typography.supporting)
             }
         }
     }

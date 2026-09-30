@@ -1,6 +1,8 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// Choose an area on a page by dragging, or by typing its coordinates.
 struct AreaSelectionControls: View {
     @Bindable var model: ReaderModel
     @State private var x = 60.0
@@ -8,23 +10,27 @@ struct AreaSelectionControls: View {
     @State private var width = 280.0
     @State private var height = 70.0
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Spacing.control) {
             Button(model.selectingToolArea ? "Cancel Area Selection" : "Draw an Area on Page", systemImage: "selection.pin.in.out") {
                 model.selectingToolArea.toggle()
                 model.pdfView?.clearSelection()
             }
-            if model.selectingToolArea { Text("Drag across one page to choose the area.").foregroundStyle(.secondary) }
+            if model.selectingToolArea {
+                Text("Drag across one page to choose the area.")
+                    .font(Typography.supporting).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let region = model.toolSelection {
                 Text("Page \(region.pageIndex + 1) · \(Double(region.bounds.width).formatted(.number.precision(.fractionLength(0)))) × \(Double(region.bounds.height).formatted(.number.precision(.fractionLength(0)))) pt selected")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Typography.meta).foregroundStyle(.secondary)
             }
             DisclosureGroup("Enter area coordinates") {
-                VStack(spacing: 8) {
-                    HStack {
+                VStack(spacing: Spacing.snug) {
+                    HStack(spacing: Spacing.snug) {
                         TextField("X", value: $x, format: .number)
                         TextField("Y", value: $y, format: .number)
                     }
-                    HStack {
+                    HStack(spacing: Spacing.snug) {
                         TextField("Width", value: $width, format: .number)
                         TextField("Height", value: $height, format: .number)
                     }
@@ -39,7 +45,7 @@ struct AreaSelectionControls: View {
                         } catch { model.errorMessage = error.localizedDescription }
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, Spacing.snug)
             }
         }
     }

@@ -10,6 +10,16 @@ final class LiveTextDelegate: NSObject, NSTextViewDelegate {
         guard !isSynchronizing, let field = notification.object as? NSTextView, let edit = model?.liveEdit else { return }
         edit.updateAttributedText(LiveTextLayout.scaled(field.attributedString(), by: 1 / scale), selectedRange: field.selectedRange())
     }
+    /// Escape ends the edit, as it does for text in Pages and Keynote.
+    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+        // Finishing removes this text view; do it after AppKit finishes the key event.
+        Task { @MainActor [weak model] in
+            model?.liveEdit?.normalizeFontSize()
+            model?.finishLiveText()
+        }
+        return true
+    }
     func textViewDidChangeSelection(_ notification: Notification) {
         guard !isSynchronizing, let field = notification.object as? NSTextView, let edit = model?.liveEdit else { return }
         // AppKit moves the caret before textDidChange. Refreshing the PDF editor

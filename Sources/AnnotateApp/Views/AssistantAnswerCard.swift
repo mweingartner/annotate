@@ -1,43 +1,50 @@
 import AnnotateCore
 import AppKit
+import Atrium
 import SwiftUI
 
+/// One answer: what was asked, the reply, and the pages and passages it came from. The
+/// panel raises only the latest answer on a surface; earlier ones sit between hairlines.
 struct AssistantAnswerCard: View {
     let answer: DocumentAssistantAnswer
     let goToPage: (Int) -> Void
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: answer.title).font(.headline).textSelection(.enabled)
-            if let generatedBy = answer.generatedBy {
-                Text(generatedBy).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
-            Text(displayedAnswer).lineSpacing(3).textSelection(.enabled)
-            HStack {
-                Text("Sources").font(.subheadline.bold())
-                Spacer()
-                if answer.isGenerated {
-                    Button(copied ? "Copied" : "Copy answer", systemImage: copied ? "checkmark" : "doc.on.doc", action: copy)
-                        .buttonStyle(.borderless).font(.caption)
+        VStack(alignment: .leading, spacing: Spacing.control) {
+            VStack(alignment: .leading, spacing: Spacing.tight) {
+                Text(verbatim: answer.title).font(Typography.heading).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let generatedBy = answer.generatedBy {
+                    Text(generatedBy).font(Typography.meta).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
-            AssistantSourcePages(sources: answer.sources, goToPage: goToPage)
+            Text(displayedAnswer).font(Typography.body).lineSpacing(Spacing.hair).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 0) {
+                SectionHeader("Sources") {
+                    if answer.isGenerated {
+                        Button(copied ? "Copied" : "Copy answer", systemImage: copied ? "checkmark" : "doc.on.doc", action: copy)
+                            .buttonStyle(.quiet)
+                    }
+                }
+                AssistantSourcePages(sources: answer.sources, goToPage: goToPage)
+            }
             DisclosureGroup("Read \(answer.sources.count) original passages") {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(answer.sources) { source in AssistantSourceRow(source: source, goToPage: goToPage) }
-                }.padding(.top, 8)
+                AssistantSourceList(sources: answer.sources, goToPage: goToPage)
+                    .padding(.top, Spacing.snug)
             }
             DisclosureGroup("How this answer was made") {
-                Text(answer.coverage).font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                Text(answer.coverage).font(Typography.supporting).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Spacing.snug)
             }
             if answer.isGenerated {
                 Text("Check important details against the original pages.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Typography.supporting).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14)
-        .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 12))
         .onChange(of: answer.id) { _, _ in copied = false }
     }
 

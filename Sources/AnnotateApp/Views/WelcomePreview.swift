@@ -1,3 +1,4 @@
+import Atrium
 import SwiftUI
 
 struct WelcomePreview: View {
@@ -32,7 +33,7 @@ struct WelcomePreview: View {
 
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "bookmark.fill")
-                    .foregroundStyle(ReaderStyle.accent)
+                    .foregroundStyle(Palette.accentText)
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Worth coming back to")
                         .font(.callout.bold())
@@ -42,7 +43,7 @@ struct WelcomePreview: View {
                 }
             }
             .padding(12)
-            .background(ReaderStyle.accent.opacity(0.07), in: .rect(cornerRadius: 10))
+            .background(Palette.accentText.opacity(0.07), in: .rect(cornerRadius: 10))
         }
         .padding(26)
         .frame(width: 270)

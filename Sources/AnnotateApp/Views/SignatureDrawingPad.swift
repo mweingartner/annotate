@@ -1,9 +1,15 @@
+import Atrium
 import SwiftUI
 
+/// A white pad to draw a signature with the pointer. Strokes are stored in unit
+/// coordinates, so they scale to whatever area the signature is placed in.
 struct SignatureDrawingPad: View {
+    /// The pad's height; the image preview uses the same so the methods line up.
+    static let height = Metrics.doubleRow * 3
+
     @Binding var strokes: [[CGPoint]]
     @State private var current: [CGPoint] = []
-    private let padHeight = 130.0
+    private let padHeight = SignatureDrawingPad.height
 
     var body: some View {
         Canvas { context, size in
@@ -17,8 +23,9 @@ struct SignatureDrawingPad: View {
             }
         }
         .frame(height: padHeight)
-        .background(.white, in: .rect(cornerRadius: 8))
-        .overlay { RoundedRectangle(cornerRadius: 8).stroke(.gray.opacity(0.4)) }
+        // Paper stays white in dark mode: the ink is black, like the placed signature.
+        .background(.white, in: .rect(cornerRadius: Radius.field))
+        .overlay { RoundedRectangle(cornerRadius: Radius.field).strokeBorder(Palette.hairline) }
         .overlay {
             GeometryReader { geometry in
                 Color.clear.contentShape(.rect)

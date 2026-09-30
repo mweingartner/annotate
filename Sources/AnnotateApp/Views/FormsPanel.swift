@@ -1,6 +1,8 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// The Forms inspector: create interactive fields, and fill the ones the document has.
 struct FormsPanel: View {
     @Bindable var model: ReaderModel
     @State private var name = ""
@@ -15,11 +17,13 @@ struct FormsPanel: View {
     @State private var useSelection = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Forms").font(.title2.bold())
-            Text("Fill existing interactive fields below or directly on the PDF. Create new fields on page \(model.pageNumber).").font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Fill existing interactive fields below or directly on the PDF. Create new fields on page \(model.pageNumber).")
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, Spacing.group)
             DisclosureGroup("Create a field") {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: Spacing.control) {
                     TextField("Field name or radio group", text: $name)
                     Picker("Field type", selection: $kind) {
                         ForEach(PDFFormKind.allCases) { Text($0.title).tag($0) }
@@ -27,20 +31,25 @@ struct FormsPanel: View {
                     if kind == .text { Toggle("Multiple lines", isOn: $multiline) }
                     if kind == .choice || kind == .list { TextField("Choices separated by commas", text: $options) }
                     if kind == .radio { TextField("Radio option value", text: $radioValue) }
-                    Toggle("Use selected PDF area when available", isOn: $useSelection).font(.caption)
+                    Toggle("Use selected PDF area when available", isOn: $useSelection)
                     Button(model.selectingToolArea ? "Cancel area selection" : "Draw an area on the PDF", systemImage: "selection.pin.in.out") { model.selectingToolArea.toggle() }
                     SignaturePlacementFields(left: $left, top: $top, width: $width, height: $height)
                     Button("Create \(kind.title.lowercased())", systemImage: "plus.rectangle", action: create)
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }.padding(.top, 8)
+                }.padding(.top, Spacing.snug)
             }
-            Divider()
+            .padding(.bottom, Spacing.section)
             if fields.isEmpty {
-                ContentUnavailableView("No interactive fields", systemImage: "rectangle.and.pencil.and.ellipsis", description: Text("Create a field above, or use Text and Sign to fill a noninteractive form."))
+                EmptyState("No interactive fields",
+                           message: "Create a field above, or use Text and Sign to fill a noninteractive form.",
+                           systemImage: "rectangle.and.pencil.and.ellipsis")
             } else {
-                Text("\(fields.count) fields").font(.headline)
-                ForEach(fields) { field in
-                    FormFieldRow(model: model, field: field)
+                PageSection("\(fields.count) fields") {
+                    ForEach(fields) { field in
+                        Hairline()
+                        FormFieldRow(model: model, field: field)
+                            .padding(.vertical, Spacing.snug)
+                    }
                 }
             }
         }

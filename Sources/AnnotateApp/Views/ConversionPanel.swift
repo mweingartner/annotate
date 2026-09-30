@@ -1,6 +1,9 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// The Convert & OCR inspector: create, export, compress and recognize, one file or many.
+/// Each job is a labelled section; space does the grouping.
 struct ConversionPanel: View {
     @Bindable var model: ReaderModel
     @State private var format: PDFConversionFormat = .docx
@@ -16,36 +19,29 @@ struct ConversionPanel: View {
     private var ocrOptions: PDFOCROptions { PDFOCROptions(languages: language.isEmpty ? [] : [language], recognizeEveryPage: recognizeEveryPage) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Convert & recognize").font(.title2).fontDesign(.serif).bold()
-            importSection
-            Divider()
-            exportSection
-            Divider()
-            compressionSection
-            Divider()
-            recognitionSection
-            Divider()
-            batchSection
+        VStack(alignment: .leading, spacing: 0) {
+            PageSection("Create a PDF") { importSection }
+            PageSection("Export this document") { exportSection }
+            PageSection("Compress PDF") { compressionSection }
+            PageSection("Recognize text (OCR)") { recognitionSection }
+            PageSection("Batch processing") { batchSection }
         }
-        .padding(18)
         .disabled(model.isProcessing)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Conversion tools")
     }
 
     private var importSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Create a PDF").font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.control) {
             Text("Import images, TXT, RTF, Word, and OpenDocument text. Word files are reflowed onto PDF pages; check their layout. Export Excel or PowerPoint files to PDF in their original app first.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Import file…", systemImage: "square.and.arrow.down", action: model.importForConversion)
         }
     }
 
     private var exportSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Export this document").font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.control) {
             Picker("Format", selection: $format) {
                 ForEach(PDFConversionFormat.allCases.filter { $0 != .pdf }) { item in Text(item.title).tag(item) }
             }
@@ -56,7 +52,9 @@ struct ConversionPanel: View {
                     Text("216 pixels/inch").tag(3.0)
                 }
             }
-            Text(format.detail).font(.caption).foregroundStyle(.secondary)
+            Text(format.detail)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button(format.isImage ? "Export page images…" : "Export document…", systemImage: "square.and.arrow.up") {
                 model.exportConverted(format: format, scale: scale)
             }
@@ -65,24 +63,27 @@ struct ConversionPanel: View {
     }
 
     private var compressionSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Compress PDF").font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.control) {
             Picker("Quality", selection: $compression) {
                 ForEach(PDFCompressionLevel.allCases) { item in Text(item.title).tag(item) }
             }
             Text(compression.detail + " Text, forms, and annotations remain available. File size is measured; a smaller result is not guaranteed.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Prepare compressed copy…", systemImage: "arrow.down.right.and.arrow.up.left") {
                 model.compressCurrentDocument(level: compression) { compressionResult = $0 }
             }
             .disabled(!model.canCompressContent)
-            if !compressionResult.isEmpty { Text(compressionResult).font(.caption).textSelection(.enabled) }
+            if !compressionResult.isEmpty {
+                Text(compressionResult)
+                    .font(Typography.supporting).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
     private var recognitionSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recognize text (OCR)").font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.control) {
             Picker("Language", selection: $language) {
                 Text("Detect automatically").tag("")
                 Text("English").tag("en-US")
@@ -100,9 +101,11 @@ struct ConversionPanel: View {
             Text(recognizeEveryPage
                  ? "Recognizes every page from a 144 ppi image, replacing its text layer. This reduces vector quality."
                  : "Recognizes scanned pages throughout the document. Pages with selectable text retain their existing text and vector artwork.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Text("Runs on this Mac. The searchable copy preserves visible page layout; forms and annotations become permanent page content. Review recognized words for errors.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Make searchable copy", systemImage: "text.viewfinder") {
                 model.recognizeCurrentDocument(options: ocrOptions, exportText: false) { recognitionResult = $0 }
             }
@@ -111,17 +114,22 @@ struct ConversionPanel: View {
                 model.recognizeCurrentDocument(options: ocrOptions, exportText: true) { recognitionResult = $0 }
             }
             .disabled(!model.canRenderContent)
-            if !recognitionResult.isEmpty { Text(recognitionResult).font(.caption).textSelection(.enabled) }
+            if !recognitionResult.isEmpty {
+                Text(recognitionResult)
+                    .font(Typography.supporting).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
     private var batchSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Batch processing").font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.control) {
             Picker("Operation", selection: $batchMode) {
                 ForEach(ConversionBatchMode.allCases) { item in Text(item.rawValue).tag(item) }
             }
-            Text(batchDescription).font(.caption).foregroundStyle(.secondary)
+            Text(batchDescription)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Choose files and output folder…", systemImage: "doc.on.doc") {
                 let operation: PDFConversionBatchOperation = switch batchMode {
                 case .convert: .convert(format, scale: scale)
@@ -132,7 +140,8 @@ struct ConversionPanel: View {
                 model.beginConversionBatch(operation: operation) { batchResults = $0 }
             }
             Text("Each file has its own result. Existing files are never replaced.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             ConversionResultsView(results: batchResults)
         }
     }

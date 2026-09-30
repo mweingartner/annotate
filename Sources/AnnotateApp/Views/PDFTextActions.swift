@@ -1,30 +1,46 @@
+import Atrium
 import SwiftUI
 
+/// How to start editing text, and a new text box for text that isn't on the page yet.
 struct PDFTextActions: View {
     @Bindable var model: ReaderModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            Text("Select a word, line, or paragraph on the PDF to open its text editor. Type on the page and use the font controls to format selected words.")
-                .font(.callout).foregroundStyle(.secondary)
-            if !selectedText.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Selected text").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text(selectedText).font(.callout).lineLimit(3)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(ReaderStyle.accent.opacity(0.08), in: .rect(cornerRadius: 8))
+        if model.pdfDocument?.allowsDocumentChanges != true || model.pdfDocument?.allowsCopying != true {
+            VStack(alignment: .leading, spacing: Spacing.snug) {
+                Label("Editing Not Allowed", systemImage: "lock.fill")
+                    .font(Typography.heading)
+                Text("This PDF’s security settings don’t allow its text to be changed.")
+                    .font(Typography.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Button("Edit selected text", systemImage: "text.cursor", action: editSelection)
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedText.isEmpty || model.isProcessing || model.pdfDocument?.allowsDocumentChanges != true || model.pdfDocument?.allowsCopying != true)
-                .help("Open the selected PDF passage in the native text editor")
-            Button("Add text box", systemImage: "text.badge.plus", action: addText)
-                .disabled(model.isProcessing || model.pdfDocument?.allowsDocumentChanges != true || model.pdfDocument?.allowsCopying != true)
-            Text("Select saved text to edit it again. Existing annotation text boxes also open with a click.")
-                .font(.caption).foregroundStyle(.secondary)
+        } else {
+            actions
         }
+    }
+
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: Spacing.control) {
+            Text("Click a line on the page to edit it where it is, or drag across words to edit just those. Press Escape or click elsewhere when you are done.")
+                .font(Typography.supporting)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Spacing.snug) {
+                Button("Add Text Box", systemImage: "character.textbox", action: addText)
+                    .disabled(!canEditText)
+                    .help("Add new text in the chosen area, or near the top of this page")
+                if !selectedText.isEmpty {
+                    Button("Edit Selection", systemImage: "character.cursor.ibeam", action: editSelection)
+                        .disabled(!canEditText)
+                        .help("Edit the selected words in place")
+                }
+            }
+        }
+    }
+
+    private var canEditText: Bool {
+        !model.isProcessing && model.pdfDocument?.allowsDocumentChanges == true && model.pdfDocument?.allowsCopying == true
     }
 
     private var selectedText: String {

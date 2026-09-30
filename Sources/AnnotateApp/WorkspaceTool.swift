@@ -27,7 +27,7 @@ enum WorkspaceTool: String, CaseIterable, Identifiable {
     }
     var help: String {
         switch self {
-        case .edit: "Select PDF text to edit its words and formatting, or insert new text and images"
+        case .edit: "Click text to edit it where it is; add text boxes, images and markup"
         case .pages: "Reorder, insert, rotate, extract, or remove pages"
         case .forms: "Fill existing fields or add interactive form fields"
         case .sign: "Place a typed, drawn, or imported electronic signature"

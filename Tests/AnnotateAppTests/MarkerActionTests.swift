@@ -95,6 +95,21 @@ struct MarkerActionTests {
         #expect(model.markers == [marker])
     }
 
+    @Test("A new marker takes the palette's first colour, and saves it exactly")
+    func draftDefaultColour() throws {
+        let draft = MarkerDraft(quote: "A passage", regions: [])
+        let rgb = try #require(NSColor(draft.color).usingColorSpace(.sRGB))
+        let first = MarkerColor.palette[0]
+        #expect(abs(rgb.redComponent - first.red) < 0.001)
+        #expect(abs(rgb.greenComponent - first.green) < 0.001)
+        #expect(abs(rgb.blueComponent - first.blue) < 0.001)
+        // Through the reader: a captured selection's draft saves as the same palette colour.
+        let (_, marker) = try fixture()
+        #expect(abs(marker.color.red - first.red) < 0.001)
+        #expect(abs(marker.color.green - first.green) < 0.001)
+        #expect(abs(marker.color.blue - first.blue) < 0.001)
+    }
+
     @Test("Page descriptions deduplicate line regions and retain disjoint page ranges")
     func multiPageDescription() {
         let region: (Int) -> PageRegion = { PageRegion(pageIndex: $0, bounds: CGRect(x: 0, y: 0, width: 10, height: 10)) }

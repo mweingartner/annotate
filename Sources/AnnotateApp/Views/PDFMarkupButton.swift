@@ -10,6 +10,7 @@ struct PDFMarkupButton: View {
 
     var body: some View {
         Button(title, systemImage: icon) { model.addToolMarkup(type, color: NSColor(color)) }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.quiet)
+            .help("\(title) the selected text or area")
     }
 }

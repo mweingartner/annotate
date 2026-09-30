@@ -103,7 +103,8 @@ extension ReaderModel {
             defer { self?.isProcessing = false; self?.operationProgress = ""; self?.operationTask = nil }
             do {
                 try Task.checkCancellation()
-                try await operation()
+                // Long operations render pages for output files; markers must look as saved.
+                try await MarkerChrome.drawingForOutput { try await operation() }
             } catch is CancellationError {
                 self?.statusMessage = "Operation cancelled"
             } catch { self?.errorMessage = error.localizedDescription }

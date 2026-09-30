@@ -1,11 +1,13 @@
+import Atrium
 import SwiftUI
 
+/// Position and size of the selected image's frame, in PDF points.
 struct ImageGeometryControls: View {
     @Bindable var session: ImageEditSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.snug) {
+            Grid(alignment: .leading, horizontalSpacing: Spacing.snug, verticalSpacing: Spacing.snug) {
                 GridRow {
                     Text("X")
                     TextField("Horizontal position", value: $session.x, format: .number.precision(.fractionLength(0...1)))
@@ -22,13 +24,18 @@ struct ImageGeometryControls: View {
                     TextField("Height", value: $session.height, format: .number.precision(.fractionLength(0...1)))
                         .accessibilityLabel("Image height in PDF points")
                 }
-            }.font(.caption).textFieldStyle(.roundedBorder)
+            }.font(Typography.supporting).textFieldStyle(.roundedBorder)
             Toggle("Keep frame proportions", isOn: $session.keepsAspectRatio).toggleStyle(.checkbox)
             Text("PDF points from the page’s lower-left corner. The outline previews the new frame.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Typography.supporting).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if !session.geometryIsValid {
-                Label("Keep the image within the page, at least 1 pt wide and high.", systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                Label {
+                    Text("Keep the image within the page, at least 1 pt wide and high.").fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.Status.caution)
+                }
+                .font(Typography.supporting)
             }
         }
     }

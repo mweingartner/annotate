@@ -31,3 +31,12 @@ extension ReaderModel {
         statusMessage = "Marker deleted · Undo to restore"
     }
 }
+
+extension ReaderModel {
+    /// Return to reading. A pending text edit that could not be applied keeps the tool open.
+    func closeActiveTool() {
+        guard finishLiveText() else { return }
+        activeTool = nil
+        selectingToolArea = false
+    }
+}

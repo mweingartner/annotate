@@ -179,7 +179,10 @@ struct LiveTextPersistenceTests {
         #expect((0..<before.pageCount).map { model.pdfDocument?.page(at: $0)?.annotations.count } == beforeAnnotations)
         #expect((0..<before.pageCount).map { model.pdfDocument?.page(at: $0)?.bounds(for: .cropBox) } == beforeBounds)
         #expect(model.documentRevision == beforeRevision)
-        #expect(model.errorMessage?.contains("pending text remains") == true)
+        // Text that only needs more room is shown on the block (an overflow mark) and in
+        // the inspector, not in the banner; the session keeps the reason.
+        #expect(session.nativeFailureMessage != nil)
+        #expect(model.errorMessage?.contains("pending text remains") != true)
         #expect(!model.finishLiveText())
         #expect(model.liveEdit === session)
         #expect(throws: (any Error).self) { try owner.data(ofType: "com.adobe.pdf") }

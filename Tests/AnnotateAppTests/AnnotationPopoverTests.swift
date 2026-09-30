@@ -1,5 +1,6 @@
 import AnnotateCore
 import AppKit
+import Atrium
 import PDFKit
 import SwiftUI
 import Testing
@@ -51,7 +52,7 @@ struct AnnotationPopoverTests {
         let host = NSHostingView(rootView: AnnotationPopoverView(marker: marker, canEdit: true,
             hasPendingDraft: false, edit: {}, close: {}).environment(\.colorScheme, scheme))
         host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
-        host.setFrameSize(NSSize(width: 370, height: 600))
+        host.setFrameSize(NSSize(width: AnnotationPopoverView.width, height: 600))
         let size = host.fittingSize
         host.setFrameSize(size)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: true)
@@ -60,16 +61,43 @@ struct AnnotationPopoverTests {
         defer { window.close() }
         host.layoutSubtreeIfNeeded()
         host.displayIfNeeded()
-        #expect(abs(size.width - 370) < 1)
-        #expect(size.height > 380 && size.height < 600)
+        #expect(abs(size.width - AnnotationPopoverView.width) < 1)
+        #expect(size.height > AnnotationPopoverView.maximumReadingHeight && size.height < 600)
         let scroll = try #require(descendants(of: host).compactMap { $0 as? NSScrollView }.first)
         let document = try #require(scroll.documentView)
-        #expect(scroll.frame.height <= 381)
+        #expect(scroll.frame.height <= AnnotationPopoverView.maximumReadingHeight + 1)
         #expect(document.bounds.height > scroll.contentView.bounds.height * 4)
         let end = CGPoint(x: 0, y: max(0, document.bounds.maxY - scroll.contentView.bounds.height))
         scroll.contentView.scroll(to: end)
         scroll.reflectScrolledClipView(scroll.contentView)
         #expect(abs(scroll.documentVisibleRect.maxY - document.bounds.maxY) < 2)
+    }
+
+    @Test("A bookmark's details keep the popover width and need no scrolling", arguments: [ColorScheme.light, .dark])
+    func shortBookmarkLayout(scheme: ColorScheme) throws {
+        _ = NSApplication.shared
+        #expect(AnnotationPopoverView.width == Metrics.inspector.max)
+        #expect(AnnotationPopoverView.maximumReadingHeight > 0)
+        let bookmark = PDFMarker(categories: [.revisit], color: MarkerColor.palette[2], icon: "bookmark.fill",
+                                 quote: "", note: "", question: "",
+                                 regions: [.init(pageIndex: 3, bounds: CGRect(x: 60, y: 200, width: 20, height: 20))])
+        let host = NSHostingView(rootView: AnnotationPopoverView(marker: bookmark, canEdit: true,
+            hasPendingDraft: true, edit: {}, close: {}).environment(\.colorScheme, scheme))
+        host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        host.setFrameSize(NSSize(width: AnnotationPopoverView.width, height: 600))
+        let size = host.fittingSize
+        host.setFrameSize(size)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        host.layoutSubtreeIfNeeded()
+        #expect(abs(size.width - AnnotationPopoverView.width) < 1)
+        // Header, one line and actions: well under the long-note case.
+        #expect(size.height > 60 && size.height < AnnotationPopoverView.maximumReadingHeight)
+        let scroll = try #require(descendants(of: host).compactMap { $0 as? NSScrollView }.first)
+        let document = try #require(scroll.documentView)
+        #expect(document.bounds.height <= scroll.contentView.bounds.height + 1, "Nothing to scroll to")
     }
 
     private func descendants(of view: NSView) -> [NSView] {

@@ -10,6 +10,13 @@ public enum MarkerCodec {
     public static let ownerValue = "org.annotate.marker.v1"
     public static let maximumMetadataBytes = 1_048_576
 
+    /// Creates the highlight, icon and comment annotations a marker is made of. An app
+    /// may return a PDFAnnotation subclass to change how its own viewer draws markers;
+    /// what is written to the file is unaffected.
+    public static var makeAnnotation: (CGRect, PDFAnnotationSubtype) -> PDFAnnotation = {
+        PDFAnnotation(bounds: $0, forType: $1, withProperties: nil)
+    }
+
     private struct Envelope: Codable {
         var version: Int
         var marker: PDFMarker
@@ -67,7 +74,7 @@ public enum MarkerCodec {
         var prepared: [(PDFPage, PDFAnnotation)] = []
         for (index, region) in marker.regions.enumerated() {
             guard let page = document.page(at: region.pageIndex) else { throw AnnotateError.invalidPage(region.pageIndex) }
-            let highlight = PDFAnnotation(bounds: region.bounds, forType: .highlight, withProperties: nil)
+            let highlight = makeAnnotation(region.bounds, .highlight)
             highlight.color = marker.color.nsColor.withAlphaComponent(0.35)
             // Contents on a highlight make PDFKit synthesize an unaddressable comment
             // icon outside its bounds. A separate owned Text annotation carries them.
@@ -87,7 +94,7 @@ public enum MarkerCodec {
             let proposedX = first.bounds.minX - size - 3
             let x = min(max(crop.minX, proposedX), crop.maxX - size)
             let y = min(max(crop.minY, first.bounds.maxY - size), crop.maxY - size)
-            let badge = PDFAnnotation(bounds: CGRect(x: x, y: y, width: size, height: size), forType: .freeText, withProperties: nil)
+            let badge = makeAnnotation(CGRect(x: x, y: y, width: size, height: size), .freeText)
             badge.contents = iconGlyph(for: marker.icon)
             badge.font = NSFont.systemFont(ofSize: max(5, size - 4), weight: .bold)
             badge.fontColor = marker.color.readableInkColor
@@ -230,7 +237,7 @@ public enum MarkerCodec {
         let x = min(max(crop.minX, passage.maxX + 3), crop.maxX - size)
         let y = min(max(crop.minY, passage.maxY + 3), crop.maxY - size)
         let bounds = CGRect(x: x, y: y, width: size, height: size).applying(transform.inverted())
-        let tag = PDFAnnotation(bounds: bounds, forType: .text, withProperties: nil)
+        let tag = makeAnnotation(bounds, .text)
         tag.iconType = .comment
         tag.contents = readableContents(for: marker)
         // PDFKit draws the standard comment glyph in dark ink. A pale category tint
@@ -268,9 +275,12 @@ public enum MarkerCodec {
         if symbol.contains("checkmark") { return "✓" }
         if symbol.contains("flag") { return "⚑" }
         if symbol.contains("arrow") { return "↻" }
-        if symbol.contains("lightbulb") { return "✦" }
+        if symbol.contains("lightbulb") || symbol.contains("sparkle") { return "✦" }
         if symbol.contains("bookmark") { return "◆" }
         if symbol.contains("exclamation") { return "!" }
+        if symbol.contains("heart") { return "♥" }
+        if symbol.contains("quote") { return "“" }
+        if symbol.contains("pin") { return "●" }
         return "≡"
     }
 }

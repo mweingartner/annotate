@@ -1,21 +1,41 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// One original passage behind an answer: a link to its page, a preview, and the full text.
 struct AssistantSourceRow: View {
     let source: DocumentAssistantSource
     let goToPage: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Spacing.tight) {
             Button(source.label, systemImage: "doc.text.magnifyingglass") { goToPage(source.pageNumber) }
                 .buttonStyle(.link).accessibilityHint("Opens the original PDF page")
-            Text(verbatim: source.text).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+            Text(verbatim: source.text).font(Typography.supporting).foregroundStyle(.secondary).lineLimit(3)
             DisclosureGroup("Full passage") {
-                Text(verbatim: source.text).font(.callout).textSelection(.enabled).padding(.top, 5)
+                Text(verbatim: source.text)
+                    .font(Typography.supporting).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Spacing.tight)
             }
-            .font(.caption)
+            .font(Typography.meta)
         }
-        .padding(10)
-        .background(.background.opacity(0.7), in: .rect(cornerRadius: 8))
+        .padding(.vertical, Spacing.snug)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Source passages as rows separated by hairlines, shared by the request review and answers.
+struct AssistantSourceList: View {
+    let sources: [DocumentAssistantSource]
+    let goToPage: (Int) -> Void
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                if index > 0 { Hairline() }
+                AssistantSourceRow(source: source, goToPage: goToPage)
+            }
+        }
     }
 }

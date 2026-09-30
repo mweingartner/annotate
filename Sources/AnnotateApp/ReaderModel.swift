@@ -7,8 +7,12 @@ import UniformTypeIdentifiers
 
 @MainActor @Observable
 final class ReaderModel {
-    var pdfDocument: PDFDocument?
-    var markers: [PDFMarker] = []
+    /// The displayed PDF. It draws its markers through `MarkerChrome`, so the viewer's
+    /// pins replace the icon annotations that other PDF readers show.
+    var pdfDocument: PDFDocument? {
+        didSet { pdfDocument?.delegate = MarkerChrome.documentDelegate }
+    }
+    var markers: [PDFMarker] = [] { didSet { MarkerChrome.remember(markers) } }
     var filter: MarkerFilter = .all
     var query = "" { didSet { scheduleSearch() } }
     var searchResults: [SearchHit] = []
@@ -290,7 +294,9 @@ final class ReaderModel {
                 return
             }
             do {
-                let data = try PDFExporter.flattenedData(document: document, markers: self.markers)
+                let data = try MarkerChrome.drawingForOutput {
+                    try PDFExporter.flattenedData(document: document, markers: self.markers)
+                }
                 try data.write(to: url, options: .atomic)
                 self.statusMessage = "Exported \(url.lastPathComponent)"
                 NSWorkspace.shared.activateFileViewerSelecting([url])

@@ -216,13 +216,20 @@ final class LiveTextEdit {
     /// Grows or shrinks downward while retaining the top edge and width. Never spills off the page.
     @discardableResult
     func fitHeightToText() -> Bool {
-        guard geometryIsValid else { return false }
+        guard let fitted = heightFittedBounds() else { return false }
+        bounds = fitted
+        return true
+    }
+
+    /// The block resized downward to fit its text, keeping its top edge and width, or nil
+    /// when that would leave the page or still not fit.
+    func heightFittedBounds() -> CGRect? {
+        guard geometryIsValid else { return nil }
         let size = requiredTextSize(width: appliedBounds.width)
         let height = max(1, ceil(size.height))
         let fitted = CGRect(x: appliedBounds.minX, y: appliedBounds.maxY - height, width: appliedBounds.width, height: height)
-        guard height.isFinite, pageBounds?.contains(fitted) ?? true, textFits(in: fitted.size) else { return false }
-        bounds = fitted
-        return true
+        guard height.isFinite, pageBounds?.contains(fitted) ?? true, textFits(in: fitted.size) else { return nil }
+        return fitted
     }
 
     var x: Double { get { Double(bounds.origin.x) } set { bounds.origin.x = newValue } }

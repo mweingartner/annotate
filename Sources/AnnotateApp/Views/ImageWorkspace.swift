@@ -1,6 +1,8 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// The source images on the current page, and the controls for the one being edited.
 struct ImageWorkspace: View {
     @Bindable var model: ReaderModel
     @State private var images: [PDFNativeImage] = []
@@ -9,32 +11,38 @@ struct ImageWorkspace: View {
 
     var body: some View {
         DisclosureGroup("Images on page \(model.pageNumber)", isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Spacing.control) {
                 if let listError {
                     Label(listError, systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Typography.supporting).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if images.isEmpty {
-                    Text("No source images found on this page. Vector drawings and text are separate PDF content.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    note("No source images found on this page. Vector drawings and text are separate PDF content.")
                 } else {
-                    Text("Choose an image to locate it on the page and edit its source content.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    LazyVStack(spacing: 6) {
+                    note("Choose an image to locate it on the page and edit its source content.")
+                    LazyVStack(spacing: 0) {
                         ForEach(Array(images.enumerated()), id: \.element.id) { index, image in
+                            if index > 0 { Hairline() }
                             ImageSelectionRow(model: model, image: image, number: index + 1)
+                                .padding(.vertical, Spacing.hair)
                         }
                     }
                 }
                 if let edit = model.imageEdit {
-                    Divider()
+                    Hairline()
                     ImageEditControls(model: model, session: edit)
                         .id("\(edit.image.id):\(edit.sourceRevision)")
                 }
-            }.padding(.top, 10)
+            }.padding(.top, Spacing.snug)
         }
         .onAppear(perform: refresh)
         .onChange(of: model.pageNumber) { refresh() }
         .onChange(of: model.documentRevision) { refresh() }
+    }
+
+    /// An explanation: supporting size, secondary, wrapping.
+    private func note(_ text: String) -> some View {
+        Text(text).font(Typography.supporting).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     private func refresh() {

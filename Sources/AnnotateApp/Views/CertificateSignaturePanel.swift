@@ -1,7 +1,9 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Signing a copy with a Keychain certificate, and validating a signed PDF.
 struct CertificateSignaturePanel: View {
     @Bindable var model: ReaderModel
     @State private var identities: [PDFSigningIdentity] = []
@@ -14,50 +16,62 @@ struct CertificateSignaturePanel: View {
     private var selectedIdentity: PDFSigningIdentity? { identities.first { $0.id == selectedID } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Certificate signature").font(.headline)
-            Text("Sign a copy to let readers verify its exact contents and signing certificate. Place any visible signature above first.")
-                .font(.caption).foregroundStyle(.secondary)
-            Button(loadedIdentities ? "Reload signing identities" : "Load identities from Keychain", systemImage: "key", action: loadIdentities)
-            if loadedIdentities {
-                if identities.isEmpty {
-                    Text("No signing identities were found. Add a certificate with its private key in Keychain Access, then reload.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Picker("Signing identity", selection: $selectedID) {
-                        Text("Choose a certificate").tag(nil as UUID?)
-                        ForEach(identities) { identity in
-                            Text("\(identity.name) · \(identity.fingerprint.suffix(8))").tag(Optional(identity.id))
+        PageSection("Certificate signature") {
+            VStack(alignment: .leading, spacing: Spacing.control) {
+                note("Sign a copy to let readers verify its exact contents and signing certificate. Place any visible signature above first.")
+                Button(loadedIdentities ? "Reload signing identities" : "Load identities from Keychain", systemImage: "key", action: loadIdentities)
+                if loadedIdentities {
+                    if identities.isEmpty {
+                        note("No signing identities were found. Add a certificate with its private key in Keychain Access, then reload.")
+                    } else {
+                        Picker("Signing identity", selection: $selectedID) {
+                            Text("Choose a certificate").tag(nil as UUID?)
+                            ForEach(identities) { identity in
+                                Text("\(identity.name) · \(identity.fingerprint.suffix(8))").tag(Optional(identity.id))
+                            }
+                        }
+                        if let selectedIdentity {
+                            DisclosureGroup("Certificate fingerprint") {
+                                Text("SHA-256: \(selectedIdentity.fingerprint)")
+                                    .font(Typography.meta.monospaced()).textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.top, Spacing.tight)
+                            }
+                        }
+                        TextField("Reason for signing (optional)", text: $reason, axis: .vertical).lineLimit(1...3)
+                        // Placing the visible signature is the pane's primary action; this is secondary.
+                        Button("Sign a copy…", systemImage: "seal", action: signCopy)
+                            .disabled(selectedIdentity == nil)
+                        note("Only Sign a copy uses your private key. macOS may ask you to allow access. The certificate is embedded; the private key stays in Keychain.")
+                    }
+                }
+                Hairline()
+                    .padding(.vertical, Spacing.snug)
+                Button("Validate a signed PDF…", systemImage: "checkmark.seal", action: chooseValidationFile)
+                note("Checks the original file, including any changes after signing. Certificate trust is evaluated on this Mac without network access.")
+                if let validatedFile {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(validatedFile).font(Typography.heading).lineLimit(2)
+                            .padding(.bottom, Spacing.snug)
+                        if reports.isEmpty { note("No certificate signatures found.") }
+                        ForEach(reports) { report in
+                            Hairline()
+                            CertificateValidationRow(report: report)
+                                .padding(.vertical, Spacing.snug)
                         }
                     }
-                    if let selectedIdentity {
-                        DisclosureGroup("Certificate fingerprint") {
-                            Text("SHA-256: \(selectedIdentity.fingerprint)")
-                                .font(.caption.monospaced()).textSelection(.enabled)
-                        }.font(.caption)
-                    }
-                    TextField("Reason for signing (optional)", text: $reason, axis: .vertical).lineLimit(1...3)
-                    Button("Sign a copy…", systemImage: "seal", action: signCopy)
-                        .buttonStyle(.borderedProminent)
-                        .disabled(selectedIdentity == nil)
-                    Text("Only Sign a copy uses your private key. macOS may ask you to allow access. The certificate is embedded; the private key stays in Keychain.")
-                        .font(.caption).foregroundStyle(.secondary)
+                }
+                DisclosureGroup("What this signature verifies") {
+                    note("This creates a detached SHA-256 approval signature. It does not certify permitted edits or add a trusted timestamp. Validation reports byte integrity separately from certificate trust; it does not check revocation or long-term archival validity. Encrypted PDFs and adding another signature to an already signed PDF are not supported.")
+                        .padding(.top, Spacing.tight)
                 }
             }
-            Divider()
-            Button("Validate a signed PDF…", systemImage: "checkmark.seal", action: chooseValidationFile)
-            Text("Checks the original file, including any changes after signing. Certificate trust is evaluated on this Mac without network access.")
-                .font(.caption).foregroundStyle(.secondary)
-            if let validatedFile {
-                Text(validatedFile).font(.subheadline.bold()).lineLimit(2)
-                if reports.isEmpty { Text("No certificate signatures found.").font(.caption).foregroundStyle(.secondary) }
-                ForEach(reports) { report in CertificateValidationRow(report: report) }
-            }
-            DisclosureGroup("What this signature verifies") {
-                Text("This creates a detached SHA-256 approval signature. It does not certify permitted edits or add a trusted timestamp. Validation reports byte integrity separately from certificate trust; it does not check revocation or long-term archival validity. Encrypted PDFs and adding another signature to an already signed PDF are not supported.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }.font(.caption)
         }
+    }
+
+    /// An explanation under a control: supporting size, secondary, wrapping.
+    private func note(_ text: String) -> some View {
+        Text(text).font(Typography.supporting).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     private func loadIdentities() {

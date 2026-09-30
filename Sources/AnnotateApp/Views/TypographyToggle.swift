@@ -1,5 +1,8 @@
+import Atrium
 import SwiftUI
 
+/// A bold, italic or underline switch. Selected reads as the system's pressed toggle
+/// state, with a check mark added when Differentiate Without Colour is on.
 struct TypographyToggle: View {
     let title: String
     let symbol: String
@@ -9,18 +12,17 @@ struct TypographyToggle: View {
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     var body: some View {
-        Button(title, systemImage: symbol, action: action)
-            .labelStyle(.iconOnly)
-            .frame(minWidth: 28, minHeight: 24)
-            .buttonStyle(.bordered)
-            .tint(selected ? ReaderStyle.accent : .secondary)
-            .background(selected ? ReaderStyle.accent.opacity(0.15) : .clear, in: .rect(cornerRadius: 6))
-            .overlay(alignment: .bottomTrailing) {
-                if selected, differentiateWithoutColor { Image(systemName: "checkmark").font(.caption2).padding(2) }
-            }
-            .disabled(!enabled)
-            .help(enabled ? title : "This font has no \(title.lowercased()) variant")
-            .accessibilityValue(selected ? "On" : "Off")
-            .accessibilityAddTraits(selected ? .isSelected : [])
+        Toggle(isOn: Binding(get: { selected }, set: { _ in action() })) {
+            Label(title, systemImage: symbol)
+        }
+        .toggleStyle(.button)
+        .labelStyle(.iconOnly)
+        .frame(minWidth: Metrics.control, minHeight: Metrics.minimumControl)
+        .overlay(alignment: .bottomTrailing) {
+            if selected, differentiateWithoutColor { Image(systemName: "checkmark").font(Typography.meta).padding(Spacing.hair) }
+        }
+        .disabled(!enabled)
+        .help(enabled ? title : "This font has no \(title.lowercased()) style")
+        .accessibilityValue(selected ? "On" : "Off")
     }
 }

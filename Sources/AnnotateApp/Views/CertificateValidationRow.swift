@@ -1,6 +1,9 @@
 import AnnotateCore
+import Atrium
 import SwiftUI
 
+/// One signature found in a validated file: its verdict as symbol and words, the signer,
+/// and the details behind the verdict.
 struct CertificateValidationRow: View {
     let report: PDFCertificateValidation
 
@@ -9,17 +12,25 @@ struct CertificateValidationRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(report.status, systemImage: verified ? "checkmark.seal" : "exclamationmark.triangle")
-                .font(.subheadline.bold())
-            Text(report.signerName).font(.subheadline).textSelection(.enabled)
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            // Symbol and words, like a StatusBadge, but free to wrap: statuses run long.
+            Label {
+                Text(report.status).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: verified ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(verified ? Palette.Status.positive : Palette.Status.caution)
+            }
+            .font(Typography.heading)
+            Text(report.signerName).font(Typography.body).textSelection(.enabled)
             DisclosureGroup("Validation details") {
-                Text(report.detail).font(.caption).textSelection(.enabled)
-                Text("Field: \(report.fieldName)").font(.caption).foregroundStyle(.secondary)
-            }.font(.caption)
+                VStack(alignment: .leading, spacing: Spacing.tight) {
+                    Text(report.detail).font(Typography.supporting).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Field: \(report.fieldName)").font(Typography.supporting).foregroundStyle(.secondary)
+                }
+                .padding(.top, Spacing.tight)
+            }
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary, in: .rect(cornerRadius: 8))
     }
 }

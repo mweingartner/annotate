@@ -1,3 +1,4 @@
+import Atrium
 import SwiftUI
 
 struct FontFamilyRow: View {
@@ -10,14 +11,11 @@ struct FontFamilyRow: View {
             HStack {
                 Text(FontCatalog.displayName(for: family)).lineLimit(1)
                 Spacer()
-                if selected { Image(systemName: "checkmark").foregroundStyle(ReaderStyle.accent) }
+                if selected { Image(systemName: "checkmark").foregroundStyle(.tint) }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 7)
-            .contentShape(.rect)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .background(selected ? ReaderStyle.accent.opacity(0.12) : .clear, in: .rect(cornerRadius: 6))
+        .buttonStyle(.quiet)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

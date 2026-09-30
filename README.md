@@ -4,7 +4,7 @@ A native macOS PDF workspace for reading, live text editing, page organization, 
 
 ![Annotate's reading guide and original marker workflow](Docs/Images/annotate-hero.jpg)
 
-*The original reading and marker surface; version 2 adds a document workspace toolbar and tool panels.*
+*The original reading and marker surface. The reader now follows the macOS glass look: a unified toolbar, a sidebar of bookmarks and annotations, and editing directly on the page ([interface design](Docs/INTERFACE_DESIGN.md)).*
 
 Annotate is written in Swift using Apple's SwiftUI, AppKit, PDFKit, Core Graphics, Core Text, Vision, FoundationModels, and Security frameworks. It has no third-party runtime dependencies, ads, account requirement, or export watermarks. PDF tools run locally. AI can use **local Ollama**, **OpenAI API**, **Claude API**, or **Apple Intelligence** when available.
 
@@ -12,8 +12,8 @@ Annotate is written in Swift using Apple's SwiftUI, AppKit, PDFKit, Core Graphic
 
 | Tool | What it does |
 | --- | --- |
-| Read and mark | Composable Important, Revisit, Question, and Note markers; custom colors/icons; exact passage navigation; contextual search; readable note popovers. |
-| Edit | Edit selectable PDF text directly on the page or in the rich side panel. Change installed font family/typeface, size, color, bold, italic, underline, alignment, letter/line/paragraph spacing, position, and dimensions for selected text runs. Select existing images to replace, remove, move, or resize their source content. Insert native text or images; add standard highlights, underlines, strikeouts, rectangles, and ellipses. |
+| Read and mark | Bookmarks for pages and annotations for passages, shown as glass pins on the page and listed in the sidebar. Composable Important, Revisit, Question, and Note categories; custom colors/icons; exact passage navigation; contextual search; page thumbnails; readable note popovers. |
+| Edit | Click a paragraph to edit its text where it is, with a floating format bar; the inspector holds every control. Change installed font family/typeface, size, color, bold, italic, underline, alignment, letter/line/paragraph spacing, position, and dimensions for selected text runs. Select existing images to replace, remove, move, or resize their source content. Insert native text or images; add standard highlights, underlines, strikeouts, rectangles, and ellipses. |
 | Pages | Thumbnail navigation and drag reordering; accessible move buttons; insert PDFs, images, and blank pages; merge, rotate, delete, extract, and split. Marker references follow the pages. |
 | Forms | Create and fill text, checkbox, radio, dropdown, and list-box fields; use live text for noninteractive forms. |
 | Sign | Type, draw, or import a visible electronic signature; sign a copy with a certificate and validate signed files. |
@@ -45,9 +45,9 @@ The installer retains a timestamped backup of the previous application under `bu
 
 ## Live editing and saving
 
-Choose **Edit** and select a word, line, or paragraph to open its editor. Selecting a passage in Read mode opens the marker editor, where **Edit PDF text** takes you directly into text editing. Type on the PDF or in the side panel; both share the same rich text and character selection. Select characters to change their font, size, color, bold, italic, underline, paragraph alignment, or spacing. With an insertion point, formatting controls apply to the whole block. Use **Add text box** for new native text. Select saved text to edit it again, or click an existing FreeText annotation while Edit is active.
+Choose **Edit** and click a paragraph to edit it in place, with the insertion point where you clicked; drag across words to edit only those. The page shows your edits in their real fonts as you type, with a quiet outline around the block and a floating format bar. Press Escape, choose Done, or click elsewhere when you are done. Selecting a passage in Read mode opens the marker editor, where **Edit PDF Text** takes you directly into text editing. The inspector's **Text in a list** shares the same rich text and character selection for VoiceOver or larger type. Select characters to change their font, size, color, bold, italic, underline, paragraph alignment, or spacing. With an insertion point, formatting controls apply to the whole block. Use **Add text box** for new native text. Select saved text to edit it again, or click an existing FreeText annotation while Edit is active.
 
-**Text edits remove the selected source glyphs and save replacement text as native PDF text.** Surrounding text, vectors, images, and annotations are preserved through the content engine. This supports ordinary selectable horizontal text, including embedded subset fonts and positioned text. The editor reads actual source typefaces and effective sizes; unavailable installed fonts produce an explicit substitution notice. It is fixed-area editing: nearby paragraphs do not reflow automatically. Position and size fields provide precise placement; **Fit text height** sizes the block within the page. Unsupported encodings or content structures, ambiguous selections, and overflow fail visibly, with pending text retained for correction or discard.
+**Text edits remove the selected source glyphs and save replacement text as native PDF text.** Surrounding text, vectors, images, and annotations are preserved through the content engine. This supports ordinary selectable horizontal text, including embedded subset fonts and positioned text. The editor reads actual source typefaces and effective sizes; unavailable installed fonts produce an explicit substitution notice. A paragraph rewraps within its own width and keeps its line spacing, and grows downward into empty page space when it needs another line; it never covers other text, and nearby paragraphs do not reflow. Position and size fields provide precise placement; **Fit text height** sizes the block within the page. Unsupported encodings or content structures, ambiguous selections, and overflow fail visibly, with pending text retained for correction or discard.
 
 OCR makes scans searchable. A selection in an invisible OCR layer offers a separate **Edit scanned text** action: it replaces the selected words in the original scan image and inserts visible, selectable PDF text. This requires one supported RGB/grayscale image, a flat paper background, and a precise OCR selection; skewed images, masks, patterned backgrounds, overlapping content, colored artwork, and selections too close to image edges are refused. Rewriting the source image losslessly can increase file size. Ordinary text editing never changes scan pixels implicitly. See the [native text design](Docs/NATIVE_TEXT_EDITING.md) for exact limits.
 
@@ -92,9 +92,9 @@ PDFKit form behavior and external-reader interoperability vary; radio controls r
 | Save / Save As | ⌘S / ⇧⌘S |
 | Edit PDF / document assistant | ⌥⌘E / ⌥⌘J |
 | Search | ⌘F |
-| Add location marker | ⇧⌘M |
+| Bookmark this page | ⇧⌘M |
 | Previous / next marker | ⌥⌘[ / ⌥⌘] |
-| Toggle marker panel | ⌥⌘S |
+| Show or hide sidebar | ⌃⌘S |
 | Export annotated PDF / print | ⇧⌘E / ⌘P |
 | Undo / redo | ⌘Z / ⇧⌘Z |
 | Zoom in / out / fit | ⌘+ / ⌘− / ⌘0 |

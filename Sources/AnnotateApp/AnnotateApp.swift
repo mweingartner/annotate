@@ -20,6 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         (NSDocumentController.shared.currentDocument as? AnnotateDocument)?.model
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        // Screenshots in both appearances without changing the system setting (Atrium).
+        if let appearance = ProcessInfo.processInfo.environment["ANNOTATE_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        }
+        #endif
+        MarkerChrome.install()
         buildMenus()
         NSDocumentController.shared.autosavingDelay = 10
         if NSDocumentController.shared.documents.isEmpty { showWelcome() }
@@ -127,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item("Redact PDF", #selector(redactPDF), "", tools, target: self)
         item("Document Assistant", #selector(documentAssistant), "j", tools, modifiers: [.command, .option], target: self)
         let view = menu("View")
-        item("Toggle Marker Panel", #selector(toggleSidebar), "s", view, modifiers: [.command, .option], target: self)
+        item("Show or Hide Sidebar", #selector(toggleSidebar), "s", view, modifiers: [.command, .control], target: self)
         item("All Markers", #selector(allMarkers), "", view, target: self)
         item("Important Passages", #selector(importantMarkers), "", view, target: self)
         item("Revisit List", #selector(revisitMarkers), "", view, target: self)
@@ -138,7 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item("Zoom Out", #selector(zoomOut), "-", view, target: self)
         item("Fit Width", #selector(fitPage), "0", view, target: self)
         let marks = menu("Markers")
-        item("Mark Current Location", #selector(addMarker), "m", marks, modifiers: [.command, .shift], target: self)
+        item("Add Bookmark", #selector(addMarker), "m", marks, modifiers: [.command, .shift], target: self)
         item("Next Marker", #selector(nextMarker), "]", marks, modifiers: [.command, .option], target: self)
         item("Previous Marker", #selector(previousMarker), "[", marks, modifiers: [.command, .option], target: self)
         let window = menu("Window"); NSApp.windowsMenu = window

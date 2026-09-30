@@ -1,5 +1,6 @@
 import AppKit
 import AnnotateCore
+import Atrium
 import PDFKit
 import SwiftUI
 
@@ -9,11 +10,20 @@ struct PDFReaderView: NSViewRepresentable {
         let view = SelectionPDFView()
         view.displayMode = .singlePageContinuous
         view.displayDirection = .vertical
+        // Paper on a neutral desk, as in Preview: pages float with a soft shadow on the
+        // system's under-page colour, which adapts to light, dark and Increase Contrast.
         view.displaysPageBreaks = true
-        view.pageBreakMargins = NSEdgeInsets(top: 20, left: 24, bottom: 20, right: 24)
-        view.backgroundColor = .windowBackgroundColor
+        view.pageShadowsEnabled = true
+        view.pageBreakMargins = NSEdgeInsets(top: Spacing.margin, left: Spacing.margin,
+                                             bottom: Spacing.margin, right: Spacing.margin)
+        view.backgroundColor = .underPageBackgroundColor
         view.minScaleFactor = 0.2
         view.maxScaleFactor = 6
+        // PDFKit asks for page overlays as it loads a document, so the provider is
+        // installed before the document is.
+        let pins = MarkerPinProvider(pdfView: view)
+        view.pinProvider = pins
+        view.pageOverlayViewProvider = pins
         view.document = model.pdfDocument
         // PDFKit's minimum/maximum assignments disable autoscaling, so enable
         // fit-to-width only after configuring the limits and document.
@@ -25,6 +35,10 @@ struct PDFReaderView: NSViewRepresentable {
         NotificationCenter.default.addObserver(view, selector: #selector(SelectionPDFView.pageChanged), name: .PDFViewPageChanged, object: view)
         NotificationCenter.default.addObserver(view, selector: #selector(SelectionPDFView.selectionChanged), name: .PDFViewSelectionChanged, object: view)
         NotificationCenter.default.addObserver(view, selector: #selector(SelectionPDFView.refreshEditorGeometry), name: .PDFViewScaleChanged, object: view)
+        if let clip = view.documentView?.enclosingScrollView?.contentView {
+            clip.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(view, selector: #selector(SelectionPDFView.canvasScrolled), name: NSView.boundsDidChangeNotification, object: clip)
+        }
         return view
     }
     func updateNSView(_ view: SelectionPDFView, context: Context) {
@@ -33,6 +47,9 @@ struct PDFReaderView: NSViewRepresentable {
             view.document = model.pdfDocument
             view.autoScales = true
         }
+        // Reading these registers the observation that redraws pins when markers change.
+        _ = (model.markers, model.selectedMarkerID)
+        view.refreshMarkerPins()
         view.refreshLiveEditor()
         view.updateAreaOutline()
     }
@@ -60,6 +77,12 @@ final class SelectionPDFView: PDFView {
     private var trackingMarkerClick = false
     var liveTextView: NSTextView?
     var liveTextDelegate: LiveTextDelegate?
+    /// The glass formatting bar that floats beside the text being edited.
+    private var formatBar: NSHostingView<LiveTextFormatBar>?
+    /// Strong reference: PDFView holds its overlay provider weakly.
+    var pinProvider: MarkerPinProvider?
+    /// A click in Edit that may become "edit this paragraph" once the button is released.
+    private var pendingParagraphEdit: NSPoint?
     private var areaStart: (PDFPage, CGPoint)?
     private let areaOutline = CAShapeLayer()
 
@@ -80,6 +103,7 @@ final class SelectionPDFView: PDFView {
     // tags/badges to this view so annotation popup handling has one event owner.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let nativeHit = super.hitTest(point)
+        if let bar = formatBar, let nativeHit, nativeHit === bar || nativeHit.isDescendant(of: bar) { return nativeHit }
         if model?.selectingToolArea == true, nativeHit != nil { return self }
         if let editor = liveTextView, nativeHit === editor || nativeHit?.isDescendant(of: editor) == true { return nativeHit }
         if model?.activeTool == .edit, let superview,
@@ -108,10 +132,17 @@ final class SelectionPDFView: PDFView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        pendingParagraphEdit = nil
         if model?.selectingToolArea == true {
             let point = convert(event.locationInWindow, from: nil)
             if let page = page(for: point, nearest: false) { areaStart = (page, convert(point, to: page)) }
             return
+        }
+        // Clicks inside the editor go straight to it (see hitTest), so a click that
+        // arrives here is elsewhere on the page: it ends the edit, as in Pages. Text that
+        // could not be applied keeps the editor open instead.
+        if model?.liveEdit != nil {
+            guard model?.finishLiveText() == true else { return }
         }
         if model?.activeTool == .edit {
             let point = convert(event.locationInWindow, from: nil)
@@ -127,8 +158,33 @@ final class SelectionPDFView: PDFView {
         if trackingMarkerClick {
             window?.makeFirstResponder(self)
         } else {
+            let editsText = model?.activeTool == .edit && event.clickCount == 1
+                && event.modifierFlags.intersection([.shift, .command, .option, .control]).isEmpty
             super.mouseDown(with: event)
+            guard editsText else { return }
+            // PDFKit may track the whole drag inside mouseDown; if the button is already
+            // up, this was a plain click. Otherwise decide when mouseUp arrives.
+            if NSEvent.pressedMouseButtons & 1 == 0 { editParagraph(at: event.locationInWindow) }
+            else { pendingParagraphEdit = event.locationInWindow }
         }
+    }
+
+    /// In Edit, a plain click on text starts editing its paragraph with the insertion
+    /// point where the click landed. Dragging selects just some words instead.
+    func editParagraph(at windowPoint: NSPoint) {
+        guard let model, model.activeTool == .edit, model.liveEdit == nil,
+              currentSelection?.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true else { return }
+        let point = convert(windowPoint, from: nil)
+        guard let page = page(for: point, nearest: false) else { return }
+        let pagePoint = convert(point, to: page)
+        guard let paragraph = ParagraphText.selection(at: pagePoint, on: page) else { return }
+        model.suppressSelection = true
+        setCurrentSelection(paragraph, animate: false)
+        model.suppressSelection = false
+        model.beginLiveText(replacingSelection: true, reflowingLines: true)
+        guard let field = liveTextView, model.liveEdit != nil else { return }
+        let index = field.characterIndexForInsertion(at: field.convert(windowPoint, from: nil))
+        field.setSelectedRange(NSRange(location: min(index, field.string.utf16.count), length: 0))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -144,6 +200,7 @@ final class SelectionPDFView: PDFView {
         if trackingMarkerClick {
             pendingMarkerHit = nil
         } else {
+            pendingParagraphEdit = nil
             super.mouseDragged(with: event)
         }
     }
@@ -174,6 +231,20 @@ final class SelectionPDFView: PDFView {
         popover.show(relativeTo: hit.anchor.intersection(bounds), of: self, preferredEdge: .maxX)
     }
 
+    /// Opens a marker's details from the keyboard or VoiceOver: goes to the marker, then
+    /// anchors the popover on its pin.
+    func showDetails(for marker: PDFMarker) {
+        guard let model, let document, let region = marker.regions.first,
+              let page = document.page(at: region.pageIndex) else { return }
+        model.jump(to: marker)
+        layoutDocumentView()
+        let icon = page.annotations.first {
+            $0.type == "FreeText" && $0.value(forAnnotationKey: MarkerCodec.identifierKey) as? String == marker.id.uuidString
+        }?.bounds ?? region.bounds
+        let anchor = MarkerPinArtwork.screenFrame(convert(MarkerPin.footprint(of: marker, icon: icon, on: page), from: page))
+        showAnnotation(MarkerHit(marker: marker, anchor: anchor))
+    }
+
     func closeAnnotationPopover() {
         annotationPopover?.close()
         annotationPopover = nil
@@ -197,6 +268,11 @@ final class SelectionPDFView: PDFView {
         }
         super.mouseUp(with: event)
         selectionTask?.cancel()
+        if let point = pendingParagraphEdit {
+            pendingParagraphEdit = nil
+            editParagraph(at: point)
+            if model?.liveEdit != nil { return }
+        }
         if let selection = currentSelection { model?.captureSelection(selection) }
     }
     @objc func pageChanged() {
@@ -205,6 +281,11 @@ final class SelectionPDFView: PDFView {
         refreshLiveEditor()
         updateAreaOutline()
     }
+
+    func refreshMarkerPins() { pinProvider?.refresh() }
+
+    @objc func canvasScrolled() { positionFormatBar() }
+
     @objc func selectionChanged() {
         selectionTask?.cancel()
         guard model?.suppressSelection == false else { return }
@@ -241,25 +322,7 @@ final class SelectionPDFView: PDFView {
         let field: NSTextView
         if let liveTextView { field = liveTextView }
         else {
-            field = NSTextView()
-            field.isRichText = true
-            field.importsGraphics = false
-            // The canvas uses zoomed point sizes. Our unscaled typography controls
-            // avoid accidentally applying a view-sized value as a PDF font size.
-            field.usesFontPanel = false
-            field.isAutomaticQuoteSubstitutionEnabled = false
-            field.isAutomaticDashSubstitutionEnabled = false
-            field.isVerticallyResizable = false
-            field.isHorizontallyResizable = false
-            field.textContainerInset = .zero
-            field.textContainer?.lineFragmentPadding = 0
-            field.drawsBackground = true
-            field.backgroundColor = .white
-            field.insertionPointColor = .black
-            field.wantsLayer = true
-            field.layer?.borderWidth = 1.5
-            field.layer?.borderColor = NSColor.controlAccentColor.cgColor
-            field.setAccessibilityLabel("Edit PDF text in place")
+            field = LiveTextCanvas.makeEditor()
             let delegate = LiveTextDelegate(model: model)
             field.delegate = delegate
             liveTextDelegate = delegate
@@ -293,7 +356,9 @@ final class SelectionPDFView: PDFView {
         let typing = LiveTextLayout.scaled(NSAttributedString(string: " ", attributes: edit.typingAttributes), by: textScale)
         field.typingAttributes = typing.attributes(at: 0, effectiveRange: nil)
         liveTextDelegate?.isSynchronizing = false
+        LiveTextCanvas.present(field, showsPendingText: edit.nativeUpdateFailed, overflows: edit.textOverflows)
         if focus { window?.makeFirstResponder(field) }
+        showFormatBar(for: edit)
     }
 
     func removeLiveEditor() {
@@ -301,6 +366,46 @@ final class SelectionPDFView: PDFView {
         liveTextView?.removeFromSuperview()
         liveTextView = nil
         liveTextDelegate = nil
+        formatBar?.removeFromSuperview()
+        formatBar = nil
+    }
+
+    private func showFormatBar(for edit: LiveTextEdit) {
+        guard let model else { return }
+        let bar: NSHostingView<LiveTextFormatBar>
+        if let formatBar, formatBar.rootView.session === edit { bar = formatBar }
+        else {
+            formatBar?.removeFromSuperview()
+            bar = NSHostingView(rootView: LiveTextFormatBar(model: model, session: edit))
+            addSubview(bar)
+            formatBar = bar
+        }
+        positionFormatBar()
+    }
+
+    /// Floats the format bar beside the text block: above it where that covers no text,
+    /// otherwise below it where that covers none, otherwise above. Always inside the canvas.
+    func positionFormatBar() {
+        guard let bar = formatBar, let field = liveTextView, field.superview != nil,
+              let edit = model?.liveEdit, let page = document?.page(at: edit.pageIndex) else { return }
+        let size = bar.fittingSize
+        let block = convert(field.bounds, from: field).insetBy(dx: -Spacing.tight, dy: -Spacing.tight)
+        let visible = safeAreaRect
+        let gap = Spacing.snug
+        var x = block.midX - size.width / 2
+        x = min(max(x, visible.minX + gap), max(visible.minX + gap, visible.maxX - size.width - gap))
+        // Screen-up is +y in an unflipped view and −y in a flipped one.
+        let above = CGRect(x: x, y: isFlipped ? block.minY - gap - size.height : block.maxY + gap, width: size.width, height: size.height)
+        let below = CGRect(x: x, y: isFlipped ? block.maxY + gap : block.minY - gap - size.height, width: size.width, height: size.height)
+        func fits(_ rect: CGRect) -> Bool { visible.contains(rect) }
+        func coversText(_ rect: CGRect) -> Bool {
+            let text = page.selection(for: convert(rect, to: page))?.string ?? ""
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let choice = [above, below].first { fits($0) && !coversText($0) } ?? (fits(above) ? above : below)
+        let y = min(max(choice.minY, visible.minY), max(visible.minY, visible.maxY - size.height))
+        bar.frame = CGRect(x: choice.minX, y: y, width: size.width, height: size.height)
+        bar.isHidden = !visible.intersects(block)
     }
 
     func updateAreaOutline() {
