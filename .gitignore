@@ -19,3 +19,6 @@ TestResults/
 .claude/todos/
 .claude/memory/
 .claude/worktrees/
+
+# Release toolchain builds
+.build-release/

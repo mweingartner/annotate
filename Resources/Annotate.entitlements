@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The App Sandbox every build runs in: files only as the user opens or saves them,
+     outgoing connections for the AI providers (including Ollama on this Mac), printing. -->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key><true/>
+    <key>com.apple.security.files.user-selected.read-write</key><true/>
+    <key>com.apple.security.network.client</key><true/>
+    <key>com.apple.security.print</key><true/>
+</dict>
+</plist>
