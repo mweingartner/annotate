@@ -65,12 +65,23 @@ struct PDFReaderView: NSViewRepresentable {
 final class SelectionPDFView: PDFView {
     weak var model: ReaderModel? {
         didSet {
+            // Links in the PDF go through ExternalLink rather than straight to the system.
+            delegate = linkDelegate
             NotificationCenter.default.removeObserver(self, name: .PDFViewDocumentChanged, object: self)
             NotificationCenter.default.addObserver(self, selector: #selector(nativeDocumentChanged), name: .PDFViewDocumentChanged, object: self)
             configureNativeFormTracking()
         }
     }
     var nativeFormTracker: NativeFormTracker?
+    /// A separate object: PDFView forwards some of its own delegate calls to its delegate,
+    /// so the view can't be its own.
+    private lazy var linkDelegate = LinkDelegate(view: self)
+    /// Asks the reader whether to open an external link, showing its whole address.
+    var confirmExternalLink: @MainActor (URL, NSWindow?, @escaping @MainActor (Bool) -> Void) -> Void = SelectionPDFView.askToOpen
+    /// Opens a link the reader agreed to.
+    var openExternalLink: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
+    /// Tells the reader a link was refused, and why.
+    var reportRefusedLink: @MainActor (String, NSWindow?) -> Void = SelectionPDFView.tellRefused
     var selectionTask: Task<Void, Never>?
     private(set) var annotationPopover: NSPopover?
     private var pendingMarkerHit: MarkerHit?
@@ -157,6 +168,10 @@ final class SelectionPDFView: PDFView {
         trackingMarkerClick = pendingMarkerHit != nil
         if trackingMarkerClick {
             window?.makeFirstResponder(self)
+        } else if model?.activeTool != .edit, let link = externalLink(at: event) {
+            // Followed here rather than by PDFKit, which would open any address. While
+            // editing, the click edits the text under the link instead.
+            follow(link)
         } else {
             let editsText = model?.activeTool == .edit && event.clickCount == 1
                 && event.modifierFlags.intersection([.shift, .command, .option, .control]).isEmpty
@@ -423,3 +438,77 @@ final class SelectionPDFView: PDFView {
         areaOutline.lineDashPattern = [5, 3]
     }
 }
+
+// MARK: - Links
+
+/// Receives PDFKit's link clicks; PDFKit's own handling would hand any address in the PDF
+/// to the system.
+@MainActor
+final class LinkDelegate: NSObject, @preconcurrency PDFViewDelegate {
+    private weak var view: SelectionPDFView?
+    init(view: SelectionPDFView) { self.view = view }
+    func pdfViewWillClick(onLink sender: PDFView, with url: URL) { view?.follow(ExternalLink(url)) }
+}
+
+extension SelectionPDFView {
+    override func perform(_ action: PDFAction) {
+        switch action {
+        case let link as PDFActionURL:
+            if let url = link.url { follow(ExternalLink(url)) }
+        case is PDFActionRemoteGoTo:
+            follow(.remoteDocument)
+        default:
+            super.perform(action)
+        }
+    }
+
+    /// The external link under a plain click, if any. Links within this PDF are left to
+    /// PDFKit, which only scrolls.
+    func externalLink(at event: NSEvent) -> ExternalLink? {
+        guard event.type == .leftMouseDown, event.clickCount == 1,
+              event.modifierFlags.intersection([.shift, .command, .option, .control]).isEmpty else { return nil }
+        let point = convert(event.locationInWindow, from: nil)
+        guard let page = page(for: point, nearest: false),
+              let annotation = page.annotation(at: convert(point, to: page)), annotation.type == "Link" else { return nil }
+        switch annotation.action {
+        case let action as PDFActionURL: return action.url.map(ExternalLink.init)
+        case is PDFActionRemoteGoTo: return .remoteDocument
+        case nil: return annotation.url.map(ExternalLink.init)
+        default: return nil
+        }
+    }
+
+    func follow(_ link: ExternalLink) {
+        // While editing, a click edits the text under it; links don't open.
+        guard model?.activeTool != .edit else { return }
+        switch link {
+        case .confirm(let url):
+            confirmExternalLink(url, window) { [weak self] agreed in
+                if agreed { self?.openExternalLink(url) }
+            }
+        case .refuse(let reason):
+            reportRefusedLink(reason, window)
+        }
+    }
+
+    private static func askToOpen(_ url: URL, in window: NSWindow?, then decide: @escaping @MainActor (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = url.scheme?.lowercased() == "mailto" ? "Write an email from this link?" : "Open this link in your browser?"
+        alert.informativeText = ExternalLink.displayed(url)
+        alert.addButton(withTitle: "Open")
+        alert.addButton(withTitle: "Cancel")
+        if let window {
+            alert.beginSheetModal(for: window) { response in decide(response == .alertFirstButtonReturn) }
+        } else {
+            decide(alert.runModal() == .alertFirstButtonReturn)
+        }
+    }
+
+    private static func tellRefused(_ reason: String, in window: NSWindow?) {
+        let alert = NSAlert()
+        alert.messageText = "Link not opened"
+        alert.informativeText = reason
+        if let window { alert.beginSheetModal(for: window) } else { alert.runModal() }
+    }
+}
+

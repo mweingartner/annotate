@@ -118,10 +118,7 @@ extension ReaderModel {
         let complete: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             do {
-                let output = url.resolvingSymlinksInPath().standardizedFileURL
-                if let source = self.owner?.fileURL?.resolvingSymlinksInPath().standardizedFileURL, output == source {
-                    throw WorkspaceError.sourceOverwrite
-                }
+                if url.isSameFile(as: self.owner?.fileURL) { throw WorkspaceError.sourceOverwrite }
                 try data.write(to: url, options: .atomic)
                 self.statusMessage = "Saved \(url.lastPathComponent)"
             } catch { self.errorMessage = error.localizedDescription }

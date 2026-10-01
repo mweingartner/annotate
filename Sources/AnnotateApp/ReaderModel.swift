@@ -289,7 +289,7 @@ final class ReaderModel {
         panel.message = "Creates a sharing copy with permanent highlights and markers, plus an index containing your full notes and questions."
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
-            if url.standardizedFileURL == self.owner?.fileURL?.standardizedFileURL {
+            if url.isSameFile(as: self.owner?.fileURL) {
                 self.errorMessage = "Choose a different filename for the flattened sharing copy so your editable markers stay available."
                 return
             }
