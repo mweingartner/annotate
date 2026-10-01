@@ -54,7 +54,9 @@ struct AssistantAPITests {
         let client = DocumentAssistantAPIClient(provider: .claude, model: "claude-haiku-4-5-20251001", apiKey: "test-key", workspaceID: "workspace-test")
         let request = try client.makeRequest(instructions: "Source-only", prompt: "Question", maximumResponseTokens: 768)
         #expect(request.url?.absoluteString == "https://api.anthropic.com/v1/messages")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key")
+        #expect(request.value(forHTTPHeaderField: "x-api-key") == "test-key")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(request.allHTTPHeaderFields?.keys.contains { $0.caseInsensitiveCompare("Authorization") == .orderedSame } == false)
         #expect(request.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
         #expect(request.value(forHTTPHeaderField: "anthropic-workspace-id") == "workspace-test")
         let body = try #require(request.httpBody)
@@ -69,8 +71,9 @@ struct AssistantAPITests {
     func ollamaRequest() throws {
         let client = DocumentAssistantAPIClient(provider: .ollama, model: "llama3.2")
         let request = try client.makeRequest(instructions: "Source-only", prompt: "Question", maximumResponseTokens: 512)
-        #expect(request.url?.absoluteString == "http://localhost:11434/api/chat")
+        #expect(request.url?.absoluteString == "http://127.0.0.1:11434/api/chat")
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(request.value(forHTTPHeaderField: "x-api-key") == nil)
         let body = try #require(request.httpBody)
         let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
         #expect(object["stream"] as? Bool == false)
@@ -79,11 +82,32 @@ struct AssistantAPITests {
     }
 
     @Test("Ollama refuses nonlocal hosts, embedded credentials, redirects-as-URLs, paths, and cloud model names",
-          arguments: ["https://example.com", "http://localhost.evil.invalid:11434", "http://127.0.0.1:11434/api/chat", "http://user:password@localhost:11434", "http://localhost:11434?destination=remote", "http://localhost:11434#remote"])
+          arguments: ["https://example.com", "http://localhost.evil.invalid:11434", "http://127.0.0.1:11434/api/chat", "http://user:password@localhost:11434", "http://localhost:11434?destination=remote", "http://localhost:11434#remote",
+                      "http://local%68ost:11434", "http://%6C%6F%63%61%6C%68%6F%73%74:11434", "http://127.0.0.%31:11434", "http://[::1%25lo0]:11434",
+                      "http://localhost%2Eevil.invalid:11434", "http://localhost:0", "ftp://localhost:11434", "http://127.0.0.2:11434", "http://0.0.0.0:11434"])
     func badOllamaAddresses(address: String) throws {
         let client = DocumentAssistantAPIClient(provider: .ollama, model: "llama3.2", ollamaBaseURL: address)
         #expect(client.unavailabilityReason != nil)
         #expect(throws: (any Error).self) { try client.makeRequest(instructions: "", prompt: "", maximumResponseTokens: 512) }
+    }
+
+    @Test("Ollama requests go to a fixed loopback host, keeping only the scheme and port",
+          arguments: [("http://localhost:11434", "http://127.0.0.1:11434/api/chat"),
+                      ("  HTTP://LocalHost:11434/  ", "http://127.0.0.1:11434/api/chat"),
+                      ("http://127.0.0.1:8080", "http://127.0.0.1:8080/api/chat"),
+                      ("https://localhost:11434", "https://127.0.0.1:11434/api/chat"),
+                      ("http://[::1]:11434", "http://[::1]:11434/api/chat"),
+                      ("http://localhost", "http://127.0.0.1/api/chat")])
+    func canonicalOllamaHost(address: String, expected: String) throws {
+        let client = DocumentAssistantAPIClient(provider: .ollama, model: "llama3.2", ollamaBaseURL: address)
+        #expect(client.unavailabilityReason == nil)
+        let request = try client.makeRequest(instructions: "", prompt: "", maximumResponseTokens: 512)
+        #expect(request.url?.absoluteString == expected)
+    }
+
+    @Test("Ollama's privacy note warns that a forwarded local port carries text off the Mac")
+    func ollamaPortForwardDisclosure() {
+        #expect(DocumentAssistantProvider.ollama.privacyDescription.contains("ssh -L"))
     }
 
     @Test("Cloud-named Ollama model cannot be invoked")
@@ -174,6 +198,7 @@ struct AssistantAPITests {
         #expect(try await client.generate(instructions: "Source-only", prompt: "Evidence", maximumResponseTokens: 512) == "Supported local answer [Page 2]")
         let requests = await transport.requests
         #expect(requests.map { $0.url?.path } == ["/api/show", "/api/chat"])
+        #expect(requests.allSatisfy { $0.url?.host == "127.0.0.1" })
     }
 
     @Test("Malformed stored keys are rejected before a request is constructed", arguments: ["", "   ", "abc\ndef", "abc\u{0}def", "emoji🔑"])
@@ -188,5 +213,6 @@ struct AssistantAPITests {
         let transport = StubTransport(body: #"{"models":[{"name":"local:8b"},{"name":"big:cloud"},{"name":"alias","remote_model":"remote","remote_host":"https://ollama.com"}]}"#)
         #expect(try await DocumentAssistantAPIClient.localOllamaModels(baseURL: "http://localhost:11434", transport: transport) == ["local:8b"])
         #expect(await transport.requests.first?.url?.path == "/api/tags")
+        #expect(await transport.requests.first?.url?.absoluteString == "http://127.0.0.1:11434/api/tags")
     }
 }

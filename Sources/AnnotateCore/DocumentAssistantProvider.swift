@@ -24,7 +24,7 @@ public enum DocumentAssistantProvider: String, CaseIterable, Identifiable, Senda
     public var privacyDescription: String {
         switch self {
         case .ollama:
-            "Connects only to Ollama on this Mac. Annotate checks that the selected model is downloaded locally before sending PDF text. Cloud models and remote aliases are refused."
+            "Connects only to Ollama on this Mac. Annotate checks that the selected model is downloaded locally before sending PDF text. Cloud models and remote aliases are refused. If that local port is forwarded elsewhere, for example by ssh -L, PDF text travels wherever it leads."
         case .openAI:
             "Generating sends the reviewed PDF passages and your request to OpenAI. API charges and OpenAI's data policies apply. Responses storage is disabled."
         case .claude:

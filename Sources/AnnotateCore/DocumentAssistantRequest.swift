@@ -1,6 +1,10 @@
 import Foundation
 
 public struct DocumentAssistantRequest: Sendable {
+    /// The provider the reader reviewed this request for. It may be sent only through that provider.
+    public let provider: DocumentAssistantProvider
+    /// The AI settings in force at review time. Changed settings require a fresh review.
+    public let settingsFingerprint: String
     public let operation: DocumentAssistantOperation
     public let question: String
     public let previousQuestion: String

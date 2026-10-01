@@ -9,6 +9,7 @@ public enum DocumentAssistantError: Error, LocalizedError, Equatable {
     case documentTooLarge
     case requestTooLong
     case contextTooLarge
+    case reviewedForAnotherProvider
     case unavailable(String)
     case generationFailed(String)
 
@@ -22,6 +23,7 @@ public enum DocumentAssistantError: Error, LocalizedError, Equatable {
         case .documentTooLarge: "This document exceeds the assistant limit of 10,000 pages or 8 MB of extracted text. Extract a smaller page range first. No partial answer was generated."
         case .requestTooLong: "Use a question of at most 1,000 UTF-8 bytes or a selection of at most 4,000 UTF-8 bytes. No text was silently shortened."
         case .contextTooLarge: "This text exceeds the local model's context limit. Select a shorter passage or ask a more specific question. No partial answer was presented."
+        case .reviewedForAnotherProvider: "This request was reviewed for a different AI provider or settings. Nothing was sent. Review it again before sending."
         case .unavailable(let reason): reason
         case .generationFailed(let reason): "The model could not finish: \(reason). Source passages remain available below."
         }

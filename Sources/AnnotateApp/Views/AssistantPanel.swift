@@ -68,7 +68,7 @@ struct AssistantPanel: View {
                 }
             }
             if let request = assistant.prepared, !assistant.isBusy {
-                AssistantRequestReview(request: request, provider: settings.provider, modelName: settings.modelName,
+                AssistantRequestReview(request: request, provider: request.provider, modelName: settings.modelName,
                                        generate: generate, goToPage: model.goToPage)
             }
             if let latest = assistant.answers.last {
@@ -186,7 +186,8 @@ struct AssistantPanel: View {
             submittedQuestion = task.needsQuestion ? question : nil
             assistant.submit(document: document, revision: model.documentRevision, operation: task,
                              question: question, selectedSources: selection, language: language,
-                             provider: settings.provider, localModel: localModel, modelName: settings.modelName)
+                             provider: settings.provider, settingsFingerprint: settings.fingerprint,
+                             localModel: localModel, modelName: settings.modelName)
             settingsExpanded = false
         } catch { assistant.report(error); settingsExpanded = true }
     }
@@ -194,7 +195,8 @@ struct AssistantPanel: View {
     private func generate() {
         do {
             let generator = try settings.makeGenerator()
-            assistant.generate(using: generator, providerName: settings.provider.label + " · " + settings.modelName)
+            assistant.generate(using: generator, providerName: settings.provider.label + " · " + settings.modelName,
+                               settingsFingerprint: settings.fingerprint)
         } catch { assistant.report(error); settingsExpanded = true }
     }
     private func cancel() { assistant.cancel() }

@@ -8,6 +8,8 @@ public final class DocumentAssistantLanguageModel: DocumentAssistantGenerating {
 
     public init() {}
 
+    public var provider: DocumentAssistantProvider { .apple }
+
     public var unavailabilityReason: String? {
         switch model.availability {
         case .available: nil
