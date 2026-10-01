@@ -139,4 +139,11 @@ Tests do not invoke paid AI APIs. The optional local test uses an already-runnin
 ANNOTATE_LOCAL_AI_SMOKE=1 ANNOTATE_LOCAL_AI_MODEL=granite4.1:8b swift test --filter AssistantLocalSmokeTests
 ```
 
+PDFs are treated as untrusted:
+
+- **Links** open only for web and mail addresses, and only after you see the full address and agree. Links to local files, network shares, other apps, or other PDF files are refused.
+- **Editing** works within fixed limits on form nesting and reuse, operators, decoded bytes, fonts, width tables, and marker metadata, and refuses streams compressed more than once, so a crafted file can't freeze the app. Edits leave no copy of the replaced content behind in thumbnails, alternative resource names, or marker quotes.
+- **Exports** never overwrite the open original, however its path is spelled.
+- **AI keys** stay in the Keychain and are sent only to their provider. Ollama is reached only on this Mac, and redirects are never followed.
+
 See [SECURITY.md](SECURITY.md) and [private vulnerability reporting](https://github.com/mweingartner/annotate/security/advisories/new). Annotate is available under the [MIT License](LICENSE).

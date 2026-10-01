@@ -85,7 +85,7 @@ struct AssistantProviderSettings: View {
                 Button("Save key", action: saveKey).disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if settings.hasSavedAPIKey { Button("Remove key", role: .destructive, action: removeKey) }
             }
-            note("Stored in your login keychain on this Mac and never synced. Only Annotate reads it, after you allow access when macOS asks.")
+            note("Stored in your login keychain on this Mac and never synced. Another app can read it only if you allow that app when macOS asks.")
         }
     }
 
