@@ -39,15 +39,11 @@ Annotate runs on **macOS 26 or newer** on **Apple Silicon** Macs.
 
 1. Download `Annotate-<version>-macOS-arm64.zip` from the [latest release](https://github.com/mweingartner/annotate/releases/latest).
 2. Open the zip and drag **Annotate.app** into your **Applications** folder.
-3. Open Annotate. Release builds are ad-hoc signed, not notarized by Apple, so the first launch is blocked with a message that Apple could not verify the app. Choose **Done**, then open **System Settings › Privacy & Security**, scroll to Security, and choose **Open Anyway** for Annotate. You only need to do this once.
+3. Open Annotate.
 
-If you prefer the terminal, you can instead clear the download flag after copying the app, and then open it normally:
+Release downloads are signed with the developer's Developer ID and notarized by Apple, so they open like any other Mac app. Each release lists the zip's SHA-256 checksum; `shasum -a 256 Annotate-<version>-macOS-arm64.zip` should print the same value.
 
-```sh
-xattr -dr com.apple.quarantine /Applications/Annotate.app
-```
-
-Each release lists the zip's SHA-256 checksum; `shasum -a 256 Annotate-<version>-macOS-arm64.zip` should print the same value.
+Annotate is also on its way to the Mac App Store as **Annotate – PDF Reader & Editor**, free, with the same features.
 
 ### Build from source
 
@@ -67,7 +63,7 @@ To build and install in `/Applications/Annotate.app`, quit Annotate normally, th
 ./Scripts/install.sh
 ```
 
-The installer keeps a timestamped backup of the previous application under `build/`. Builds you make yourself are signed for your Mac only and open without the Privacy & Security step. The application and automated tests are Swift; shell scripts invoke Apple's build and packaging tools.
+The installer keeps a timestamped backup of the previous application under `build/`. Builds you make yourself are signed for your Mac only. `Scripts/release-developer-id.sh` and `Scripts/release-appstore.sh` make the notarized download and the Mac App Store package; they need the developer's signing certificates. The application and automated tests are Swift; shell scripts invoke Apple's build and packaging tools.
 
 ### Updating
 
