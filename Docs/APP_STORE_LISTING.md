@@ -2,7 +2,7 @@
 
 The text Annotate's App Store page uses, kept here so it changes with the app.
 
-- **Name:** Annotate (fallback if taken: Annotate – PDF Reader & Editor)
+- **Name:** Annotate – PDF Reader & Editor ("Annotate" alone is taken on the Store)
 - **Subtitle (30):** Read, mark, and edit PDFs
 - **Category:** Productivity (secondary: Utilities)
 - **Price:** Free
@@ -21,7 +21,7 @@ Mark the passages that matter, edit text right where it is, and ask questions of
 
 ## Description
 
-Annotate is a calm, native PDF workspace for reading closely and editing confidently.
+Annotate is a native PDF workspace for reading closely and editing confidently.
 
 READ AND MARK
 • Mark passages as Important, Revisit, Question, or Note, with your own colors, icons, notes, and questions.
