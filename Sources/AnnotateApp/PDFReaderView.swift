@@ -448,6 +448,8 @@ final class LinkDelegate: NSObject, @preconcurrency PDFViewDelegate {
     private weak var view: SelectionPDFView?
     init(view: SelectionPDFView) { self.view = view }
     func pdfViewWillClick(onLink sender: PDFView, with url: URL) { view?.follow(ExternalLink(url)) }
+    /// PDFKit's default only beeps; the reader is told why instead, whatever route PDFKit takes.
+    func pdfViewOpenPDF(_ sender: PDFView, forRemoteGoToAction action: PDFActionRemoteGoTo) { view?.follow(.remoteDocument) }
 }
 
 extension SelectionPDFView {
@@ -494,9 +496,13 @@ extension SelectionPDFView {
     private static func askToOpen(_ url: URL, in window: NSWindow?, then decide: @escaping @MainActor (Bool) -> Void) {
         let alert = NSAlert()
         alert.messageText = url.scheme?.lowercased() == "mailto" ? "Write an email from this link?" : "Open this link in your browser?"
-        alert.informativeText = ExternalLink.displayed(url)
+        alert.informativeText = ExternalLink.summary(url)
         alert.addButton(withTitle: "Open")
         alert.addButton(withTitle: "Cancel")
+        // Return cancels: opening takes a deliberate click, even when a long address
+        // pushes the buttons out of view.
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
         if let window {
             alert.beginSheetModal(for: window) { response in decide(response == .alertFirstButtonReturn) }
         } else {

@@ -65,6 +65,23 @@ struct NativeHardeningTests {
         #expect((PDFNativeLexer.number(ArraySlice(Array(word.utf8))) != nil) == isNumber, "\(word)")
     }
 
+    @Test("A stream's tokens and an operator's operands are bounded before anything else reads them")
+    func lexerBounded() {
+        var operands = PDFNativeLexer(Data((String(repeating: "1 ", count: PDFNativeLexer.maximumOperands + 1) + "n").utf8))
+        #expect(throws: PDFNativeTextError.self) { _ = try operands.operations() }
+        var array = PDFNativeLexer(Data(("[" + String(repeating: "1 ", count: PDFNativeLexer.maximumTokens) + "] TJ").utf8))
+        #expect(throws: PDFNativeTextError.self) { _ = try array.operations() }
+        var ordinary = PDFNativeLexer(Data("BT /F1 12 Tf 72 700 Td [(A) -20 (B)] TJ ET".utf8))
+        #expect((try? ordinary.operations())?.count == 5)
+    }
+
+    @Test("A name that isn't plain printable ASCII stops editing rather than being matched loosely",
+          arguments: ["/Im#E9 Do", "/Im#C3#A9 Do", "/Im#00x Do", "/Im#20x Do", "/Im\u{E9} Do"])
+    func nonASCIINamesRefused(content: String) {
+        var lexer = PDFNativeLexer(Data(content.utf8))
+        #expect(throws: PDFNativeTextError.self) { _ = try lexer.operations() }
+    }
+
     // MARK: Work limits
 
     @Test("Forms that draw each other many times over are refused quickly, not worked through")
@@ -140,7 +157,11 @@ struct NativeHardeningTests {
 
     @Test("A stream compressed twice is never decoded; once is fine",
           arguments: [("/Filter [/FlateDecode /FlateDecode]", false), ("/Filter [/LZWDecode /FlateDecode]", false),
-                      ("/Filter /FlateDecode", true), ("/Filter [/ASCIIHexDecode /FlateDecode]", true), ("", true)])
+                      ("/Filter /FlateDecode", true), ("/Filter [/ASCIIHexDecode /FlateDecode]", true), ("", true),
+                      // Fax and JBIG2 images must state a size within the decoding limit first.
+                      ("/Filter /CCITTFaxDecode /Width 100000 /Height 100000", false), ("/Filter /JBIG2Decode /Width 100000 /Height 100000", false),
+                      ("/Filter /CCITTFaxDecode", false), ("/Filter /CCF /Width 2550 /Height 3300", true),
+                      ("/Filter [/FlateDecode /CCITTFaxDecode] /Width 2550 /Height 3300", false)])
     func chainedCompression(filter: String, bounded: Bool) throws {
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R /Crafted 6 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>", HandPDF.helvetica, HandPDF.stream(""),

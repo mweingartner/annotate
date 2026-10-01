@@ -33,16 +33,7 @@ public enum PDFNativeTextStyle {
             throw PDFNativeTextError.invalidSelection
         }
         var data = Data()
-        if let stream = nativeStream(dictionary, "Contents") { data = try nativeDecodedStream(stream) }
-        else if let contents = nativeArray(dictionary, "Contents") {
-            for index in 0..<CGPDFArrayGetCount(contents) {
-                var stream: CGPDFStreamRef?
-                guard CGPDFArrayGetStream(contents, index, &stream), let stream else {
-                    throw PDFNativeTextError.malformed("A page content array contains a non-stream object.")
-                }
-                data.append(try nativeDecodedStream(stream)); data.append(10)
-            }
-        }
+        data = try nativePageContents(dictionary)
         let program = try PDFNativeTextProgram(data: data, resources: PDFNativeTextEditor.inheritedResources(dictionary))
         try PDFNativeTextEditor.selectGlyphs(in: program, region: region.bounds, originalText: originalText, allowInvisible: true)
         let glyphs = program.glyphs.filter(\.selected)

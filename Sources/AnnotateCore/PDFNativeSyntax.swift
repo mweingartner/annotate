@@ -16,8 +16,13 @@ struct PDFNativeOperation {
 }
 
 struct PDFNativeLexer {
+    /// Tokens one stream may hold, and operands one operator may take. Every token is a
+    /// separate allocation: a 64 MB stream of bare numbers would otherwise cost gigabytes
+    /// before any other limit applies. Real operators take a few dozen operands at most.
+    static let maximumTokens = 4_000_000, maximumOperands = 4_096
     let bytes: [UInt8]
     var index = 0
+    private var tokens = 0
     init(_ data: Data) { bytes = Array(data) }
     init(bytes: [UInt8]) { self.bytes = bytes }
     static func whitespace(_ byte: UInt8) -> Bool { [0, 9, 10, 12, 13, 32].contains(byte) }
@@ -32,6 +37,8 @@ struct PDFNativeLexer {
     mutating func next(depth: Int = 0) throws -> PDFNativeToken? {
         guard depth < 80 else { throw PDFNativeTextError.unsupported("The content nesting exceeds the safe parsing limit.") }
         skip(); guard index < bytes.count else { return nil }
+        tokens += 1
+        guard tokens <= Self.maximumTokens else { throw PDFNativeTextError.unsupported("This page's content exceeds the safe parsing limit.") }
         let byte = bytes[index]; index += 1
         if byte == 40 {
             var result: [UInt8] = [], nesting = 1
@@ -92,6 +99,11 @@ struct PDFNativeLexer {
                 if bytes[index] == 35, index + 2 < bytes.count, let high = Self.hex(bytes[index + 1]), let low = Self.hex(bytes[index + 2]) { name.append(high * 16 + low); index += 3 }
                 else { name.append(bytes[index]); index += 1 }
             }
+            // Resource names are matched exactly as bytes elsewhere; a name that isn't plain
+            // printable ASCII can't be matched the same way, so such a page isn't edited.
+            guard name.allSatisfy({ (33...126).contains($0) }) else {
+                throw PDFNativeTextError.unsupported("This page uses a resource name with characters that can't be edited safely.")
+            }
             return .name(String(decoding: name, as: UTF8.self))
         }
         let start = index - 1
@@ -108,7 +120,7 @@ struct PDFNativeLexer {
             switch byte {
             case 48...57: digits += 1
             case 46: points += 1
-            case 43, 45 where offset == 0: break
+            case 43 where offset == 0, 45 where offset == 0: break
             default: return nil
             }
         }
@@ -126,7 +138,10 @@ struct PDFNativeLexer {
                 if name == "BI" { throw PDFNativeTextError.unsupported("This page uses inline images in its text content stream.") }
                 result.append(PDFNativeOperation(operands: operands, name: name, range: start..<index)); operands = []
                 guard result.count <= 250_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe content-operation limit.") }
-            } else { operands.append(value) }
+            } else {
+                operands.append(value)
+                guard operands.count <= Self.maximumOperands else { throw PDFNativeTextError.unsupported("This page's content has an operator with too many operands.") }
+            }
         }
         guard operands.isEmpty else { throw PDFNativeTextError.malformed("Content ends with unused operands.") }
         return result

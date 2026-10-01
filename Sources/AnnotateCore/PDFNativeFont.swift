@@ -11,10 +11,12 @@ func nativeArrayNumber(_ array: CGPDFArrayRef, _ index: Int) -> Double? { var va
 /// Whether decoding `stream` expands it by a bounded factor. Core Graphics decodes a
 /// stream completely before its size can be checked, and chained compression filters
 /// multiply: two Flate passes can turn kilobytes into gigabytes. One compression filter
-/// (about 1000:1 at most) is accepted; a chain of them is not.
+/// (about 1000:1 at most for Flate) is accepted; a chain of them is not, and a fax or
+/// JBIG2 image must state a size within the decoding limit.
 func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
     guard let dictionary = CGPDFStreamGetDictionary(stream) else { return false }
-    let compressing: Set<String> = ["FlateDecode", "Fl", "LZWDecode", "LZW", "RunLengthDecode", "RL"]
+    let bitmapExpanding: Set<String> = ["CCITTFaxDecode", "CCF", "JBIG2Decode"]
+    let compressing = bitmapExpanding.union(["FlateDecode", "Fl", "LZWDecode", "LZW", "RunLengthDecode", "RL"])
     var filters: [String] = []
     if let name = nativeName(dictionary, "Filter") { filters = [name] }
     else if let array = nativeArray(dictionary, "Filter") {
@@ -25,7 +27,29 @@ func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
             filters.append(String(cString: name))
         }
     }
-    return filters.filter(compressing.contains).count <= 1
+    guard filters.filter(compressing.contains).count <= 1 else { return false }
+    // Fax and JBIG2 images expand a few bytes into a page-sized bitmap: the image's own
+    // size must be stated, and be within what a stream may decode to, before decoding.
+    if filters.contains(where: bitmapExpanding.contains) {
+        guard let width = nativeNumber(dictionary, "Width"), let height = nativeNumber(dictionary, "Height"),
+              width.isFinite, height.isFinite, width > 0, height > 0,
+              (width / 8).rounded(.up) * height <= 64 * 1_024 * 1_024 else { return false }
+    }
+    return true
+}
+
+/// A page's content, its streams joined in order, within the total a page may hold.
+func nativePageContents(_ page: CGPDFDictionaryRef) throws -> Data {
+    if let stream = nativeStream(page, "Contents") { return try nativeDecodedStream(stream) }
+    var data = Data()
+    guard let contents = nativeArray(page, "Contents") else { return data }
+    for index in 0..<CGPDFArrayGetCount(contents) {
+        var stream: CGPDFStreamRef?
+        guard CGPDFArrayGetStream(contents, index, &stream), let stream else { throw PDFNativeTextError.malformed("A page content array contains a non-stream object.") }
+        data.append(try nativeDecodedStream(stream)); data.append(10)
+        guard data.count <= PDFNativeTextProgram.Work.maximumBytes else { throw PDFNativeTextError.unsupported("The page's content exceeds the safe editing limit.") }
+    }
+    return data
 }
 
 func nativeDecodedStream(_ stream: CGPDFStreamRef) throws -> Data {

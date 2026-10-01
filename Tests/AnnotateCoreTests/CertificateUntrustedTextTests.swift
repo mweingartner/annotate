@@ -65,4 +65,12 @@ struct CertificateUntrustedTextTests {
         let padded = String(repeating: "\u{200B}", count: 1_000) + "Name" + String(repeating: "\n", count: 1_000) + "Here"
         #expect(UntrustedText.display(padded, limit: 20) == "Name Here")
     }
+
+    @Test("A character stacked with thousands of combining marks is bounded too")
+    func combiningMarksBounded() {
+        let stacked = "A" + String(repeating: "\u{0301}", count: 10_000) + "B"
+        let shown = UntrustedText.display(stacked, limit: 40)
+        #expect(shown.unicodeScalars.count <= 40 * 4 + 1)
+        #expect(shown.hasSuffix("…"))
+    }
 }

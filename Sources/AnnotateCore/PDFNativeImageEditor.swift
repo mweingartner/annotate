@@ -224,6 +224,7 @@ public enum PDFNativeImageEditor {
             var stream: CGPDFStreamRef?
             guard CGPDFArrayGetStream(array, index, &stream), let stream else { throw PDFNativeImageError.cannotWrite }
             result.append(try nativeDecodedStream(stream)); result.append(10)
+            guard result.count <= 128 * 1_024 * 1_024 else { throw PDFNativeImageError.unsupported("The page's content exceeds safe editing limits.") }
         }
         return result
     }

@@ -31,10 +31,25 @@ enum ExternalLink: Equatable {
     /// A link to a page in another PDF file is refused: the author chooses which file.
     static let remoteDocument = ExternalLink.refuse("This link opens another file on your Mac or network, so Annotate doesn't open it.")
 
+    /// What the reader is asked about: the site first, as people read the start of an
+    /// address, a warning when the address hides it behind a user name, then the
+    /// complete address.
+    static func summary(_ url: URL) -> String {
+        var lines: [String] = []
+        if let host = url.host(percentEncoded: false), !host.isEmpty { lines.append("Site: \(displayed(host))") }
+        if url.user(percentEncoded: false) != nil {
+            lines.append("This address includes a user name before the site, which can make it look like a different site.")
+        }
+        lines.append(displayed(url))
+        return lines.joined(separator: "\n\n")
+    }
+
     /// The address as the reader sees it before agreeing: complete, on one line, with
     /// invisible and direction-changing characters shown escaped.
-    static func displayed(_ url: URL) -> String {
-        url.absoluteString.unicodeScalars.map { scalar -> String in
+    static func displayed(_ url: URL) -> String { displayed(url.absoluteString) }
+
+    static func displayed(_ text: String) -> String {
+        text.unicodeScalars.map { scalar -> String in
             switch scalar.properties.generalCategory {
             case .control, .format, .lineSeparator, .paragraphSeparator:
                 String(format: "\\u{%04X}", scalar.value)

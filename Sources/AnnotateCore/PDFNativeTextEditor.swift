@@ -63,15 +63,7 @@ public enum PDFNativeTextEditor {
         guard let pageID = graph.objectID(for: pageDictionary), let value = graph[pageID],
               case .dictionary(var pageValues) = value else { throw PDFNativeTextError.cannotWrite }
         let resources = inheritedResources(pageDictionary)
-        var data = Data()
-        if let stream = nativeStream(pageDictionary, "Contents") { data = try nativeDecodedStream(stream) }
-        else if let contents = nativeArray(pageDictionary, "Contents") {
-            for index in 0..<CGPDFArrayGetCount(contents) {
-                var stream: CGPDFStreamRef?
-                guard CGPDFArrayGetStream(contents, index, &stream), let stream else { throw PDFNativeTextError.malformed("A page content array contains a non-stream object.") }
-                data.append(try nativeDecodedStream(stream)); data.append(10)
-            }
-        }
+        let data = try nativePageContents(pageDictionary)
         let program: PDFNativeTextProgram?
         if originalText.isEmpty {
             guard !scanMode else { throw PDFNativeTextError.invalidSelection }

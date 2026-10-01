@@ -491,7 +491,8 @@ struct NativeReflowFuzzTests {
         data.replaceSubrange(range, with: Data([0x2F, 0x49, 0x6D, 0xE9, 0x20, 0x44, 0x6F]))
         let document = try #require(PDFDocument(data: data))
         let before = try contents(document)
-        #expect(throws: PDFNativeReflowRefusal(message: PDFNativeReflow.Refusal.fixedContent.message)) { try edit(document, delta: 14) }
+        // The page's names are refused as soon as they are read; reflow never sees them.
+        #expect(throws: PDFNativeTextError.self) { try edit(document, delta: 14) }
         #expect(try contents(document) == before)
     }
 

@@ -129,4 +129,24 @@ struct ExternalLinkTests {
         view.follow(ExternalLink(try #require(URL(string: "https://example.com"))))
         #expect(record.asked.count == 1 && record.opened.count == 1)
     }
+
+    @Test("The question names the site first, and warns when a user name could disguise it")
+    func summaryNamesTheSite() throws {
+        let plain = try #require(URL(string: "https://example.com/a"))
+        #expect(ExternalLink.summary(plain).hasPrefix("Site: example.com"))
+        #expect(ExternalLink.summary(plain).hasSuffix("https://example.com/a"))
+        let disguised = try #require(URL(string: "https://www.bank.com&x=1@evil.example/login"))
+        let summary = ExternalLink.summary(disguised)
+        #expect(summary.hasPrefix("Site: evil.example"))
+        #expect(summary.contains("user name"))
+    }
+
+    @Test("PDFKit's own route for links into other PDFs is answered by the same refusal")
+    func remoteGoToDelegate() throws {
+        let (view, record, window) = view(agreeing: true)
+        defer { window.close() }
+        let action = PDFActionRemoteGoTo(pageIndex: 0, at: .zero, fileURL: URL(fileURLWithPath: "/tmp/other.pdf"))
+        try #require(view.delegate).pdfViewOpenPDF?(view, forRemoteGoToAction: action)
+        #expect(record.refused.count == 1 && record.opened.isEmpty)
+    }
 }

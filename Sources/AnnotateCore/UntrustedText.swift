@@ -13,7 +13,10 @@ public enum UntrustedText {
         guard limit > 0 else { return "" }
         var scalars = String.UnicodeScalarView()
         var pendingSpace = false
+        // One character can stack thousands of combining marks; bound the scalars too.
+        let scalarLimit = limit * 4
         for scalar in text.unicodeScalars {
+            if scalars.count >= scalarLimit { return String(scalars).prefix(limit - 1).trimmingCharacters(in: .whitespaces) + "…" }
             // Whitespace first: line breaks and tabs are also controls, but they separate words.
             if scalar.properties.isWhitespace {
                 pendingSpace = !scalars.isEmpty
