@@ -28,6 +28,13 @@ xcrun actool Resources/Assets.xcassets --compile "$app/Contents/Resources" --pla
     --output-format human-readable-text --notices --warnings >/dev/null
 /usr/libexec/PlistBuddy -c "Merge $partial" "$app/Contents/Info.plist" >/dev/null
 rm -f "$partial"
+# actool's AppIcon.icns keeps only the small sizes; the App Store also checks the .icns for
+# 512 and 1024 pixels, so write it from the same icon set at every size.
+icons=$(mktemp -d -t annotate-icon)
+mkdir "$icons/AppIcon.iconset"
+cp Resources/Assets.xcassets/AppIcon.appiconset/icon_*.png "$icons/AppIcon.iconset/"
+iconutil -c icns -o "$app/Contents/Resources/AppIcon.icns" "$icons/AppIcon.iconset"
+rm -rf "$icons"
 
 # What Xcode records about the toolchain; App Store Connect checks the SDK and Xcode used.
 sdk_version=$(xcrun --sdk macosx --show-sdk-version)
