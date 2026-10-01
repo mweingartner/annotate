@@ -12,10 +12,10 @@ struct FormFieldRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.snug) {
             HStack(spacing: Spacing.snug) {
-                Button("\(field.name) • p. \(field.pageIndex + 1)") { model.goToPage(field.pageIndex + 1) }
+                Button("\(UntrustedText.display(field.name, limit: 80)) • p. \(field.pageIndex + 1)") { model.goToPage(field.pageIndex + 1) }
                     .buttonStyle(.quiet).font(Typography.heading)
                 Spacer(minLength: Spacing.snug)
-                Button("Remove \(field.name)", systemImage: "trash", role: .destructive) { model.removeFormField(field) }
+                Button("Remove \(UntrustedText.display(field.name, limit: 80))", systemImage: "trash", role: .destructive) { model.removeFormField(field) }
                     .labelStyle(.iconOnly).buttonStyle(.quiet).help("Remove field")
             }
             if field.readOnly {
@@ -28,7 +28,7 @@ struct FormFieldRow: View {
             case .text:
                 HStack(spacing: Spacing.snug) {
                     TextField("Value", text: $value, axis: .vertical).lineLimit(1...5)
-                        .accessibilityLabel("Value for \(field.name)")
+                        .accessibilityLabel("Value for \(UntrustedText.display(field.name, limit: 80))")
                         .onSubmit(save)
                     Button("Apply", action: save)
                 }.disabled(field.readOnly)

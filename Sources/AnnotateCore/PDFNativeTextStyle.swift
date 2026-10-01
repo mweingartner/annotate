@@ -94,7 +94,7 @@ public enum PDFNativeTextStyle {
                     }
                     let letters = bounded(chosen.letters), spaces = bounded(chosen.spaces)
                     if letters != 0 || spaces != 0 { tracking[key] = (letters, spaces) }
-                    let notice = "\(unavailable.name) isn’t installed; using \(font.displayName ?? font.fontName), the closest installed match."
+                    let notice = "\(UntrustedText.display(unavailable.name, limit: 80)) isn’t installed; using \(font.displayName ?? font.fontName), the closest installed match."
                     if !substitutions.contains(notice) { substitutions.append(notice) }
                 }
                 cache[key] = font
