@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import Security
 
 @MainActor
@@ -15,7 +14,7 @@ public struct PDFSigningIdentity: Identifiable {
         guard let certificate else { throw PDFCertificateError.security(errSecItemNotFound) }
         self.identity = identity
         name = SecCertificateCopySubjectSummary(certificate) as String? ?? "Unnamed signing certificate"
-        fingerprint = SHA256.hash(data: SecCertificateCopyData(certificate) as Data).map { String(format: "%02X", $0) }.joined(separator: ":")
+        fingerprint = PDFCertificateX509.fingerprint(certificate)
     }
 
     /// Only enumerate after the user opens identity setup. Listing does not sign

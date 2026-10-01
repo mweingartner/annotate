@@ -8,11 +8,14 @@ struct CertificateFixture {
     let identity: SecIdentity
     let certificate: SecCertificate
 
-    init() throws {
+    /// A disposable self-signed identity. `extensions` are OpenSSL `-addext` values, such
+    /// as `extendedKeyUsage=serverAuth`; with none, the certificate has no extensions.
+    init(extensions: [String] = []) throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("annotate-certificate-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         do {
-            try Self.openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "key.pem", "-out", "certificate.pem", "-days", "1", "-subj", "/CN=Annotate Disposable Test Certificate"], in: directory)
+            try Self.openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "key.pem", "-out", "certificate.pem", "-days", "1", "-subj", "/CN=Annotate Disposable Test Certificate"]
+                + extensions.flatMap { ["-addext", $0] }, in: directory)
             try Self.openssl(["pkcs12", "-export", "-inkey", "key.pem", "-in", "certificate.pem", "-out", "fixture.p12", "-passout", "pass:disposable-test-only"], in: directory)
             let data = try Data(contentsOf: directory.appendingPathComponent("fixture.p12"))
             var imported: CFArray?

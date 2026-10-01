@@ -8,25 +8,7 @@ enum PDFCertificateDER {
     static func requireDetachedSignedData(_ data: Data) throws {
         guard data.count <= 1_048_576 else { throw PDFCertificateError.invalidEnvelope }
         let bytes = [UInt8](data)
-        func elements(_ range: Range<Int>) throws -> [(tag: UInt8, body: Range<Int>)] {
-            var offset = range.lowerBound, result: [(tag: UInt8, body: Range<Int>)] = []
-            while offset < range.upperBound {
-                guard result.count < 64, offset + 2 <= range.upperBound else { throw PDFCertificateError.invalidEnvelope }
-                let tag = bytes[offset], first = bytes[offset + 1]; offset += 2
-                guard tag & 0x1F != 0x1F, first != 0x80 else { throw PDFCertificateError.invalidEnvelope }
-                var length = Int(first)
-                if first > 0x80 {
-                    let count = Int(first & 0x7F)
-                    guard count <= 4, offset + count <= range.upperBound else { throw PDFCertificateError.invalidEnvelope }
-                    length = 0
-                    for byte in bytes[offset..<(offset + count)] { length = length * 256 + Int(byte) }
-                    offset += count
-                }
-                guard length <= range.upperBound - offset else { throw PDFCertificateError.invalidEnvelope }
-                result.append((tag, offset..<(offset + length))); offset += length
-            }
-            return result
-        }
+        func elements(_ range: Range<Int>) throws -> [Element] { try PDFCertificateDER.elements(bytes, in: range) }
         let root = try elements(0..<bytes.count)
         guard root.count == 1, root[0].tag == 0x30 else { throw PDFCertificateError.invalidEnvelope }
         let contentInfo = try elements(root[0].body)
@@ -42,6 +24,33 @@ enum PDFCertificateDER {
         let dataOID: [UInt8] = [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x07, 0x01]
         guard encapsulated.count == 1, encapsulated[0].tag == 0x06,
               Array(bytes[encapsulated[0].body]) == dataOID else { throw PDFCertificateError.invalidEnvelope }
+    }
+
+    /// One DER value: its single-byte tag and the range of its content bytes.
+    typealias Element = (tag: UInt8, body: Range<Int>)
+
+    /// Splits a run of definite-length DER values. Untrusted input: rejects
+    /// multi-byte tags, indefinite lengths, lengths past the range, and more
+    /// than `maximumCount` values, so a hostile structure cannot grow work.
+    static func elements(_ bytes: [UInt8], in range: Range<Int>, maximumCount: Int = 64) throws -> [Element] {
+        guard range.lowerBound >= 0, range.upperBound <= bytes.count else { throw PDFCertificateError.invalidEnvelope }
+        var offset = range.lowerBound, result: [Element] = []
+        while offset < range.upperBound {
+            guard result.count < maximumCount, offset + 2 <= range.upperBound else { throw PDFCertificateError.invalidEnvelope }
+            let tag = bytes[offset], first = bytes[offset + 1]; offset += 2
+            guard tag & 0x1F != 0x1F, first != 0x80 else { throw PDFCertificateError.invalidEnvelope }
+            var length = Int(first)
+            if first > 0x80 {
+                let count = Int(first & 0x7F)
+                guard count <= 4, offset + count <= range.upperBound else { throw PDFCertificateError.invalidEnvelope }
+                length = 0
+                for byte in bytes[offset..<(offset + count)] { length = length * 256 + Int(byte) }
+                offset += count
+            }
+            guard length <= range.upperBound - offset else { throw PDFCertificateError.invalidEnvelope }
+            result.append((tag, offset..<(offset + length))); offset += length
+        }
+        return result
     }
 
     static func encode(_ data: Data) throws -> Data {

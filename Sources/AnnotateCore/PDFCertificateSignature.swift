@@ -86,13 +86,14 @@ public enum PDFCertificateSignature {
                 let signed = try PDFCertificateInspection.signedContent(dictionary, data: data)
                 let checked = try PDFCertificateCMS.verify(signed.envelope, content: signed.content, anchors: anchors)
                 return PDFCertificateValidation(fieldName: entry.name, signerName: checked.names,
-                    integrity: checked.intact ? .intact : .invalid, trust: checked.intact ? (checked.trusted ? .trusted : .untrusted) : .notEvaluated,
+                    integrity: checked.intact ? .intact : .invalid, trust: checked.intact ? checked.trust : .notEvaluated,
                     coversWholeFile: signed.coversWholeFile,
-                    detail: checked.detail + (signed.coversWholeFile ? "" : " Additional bytes were appended after this signature; their changes have not been validated."))
+                    detail: checked.detail + (signed.coversWholeFile ? "" : " Additional bytes were appended after this signature; their changes have not been validated."),
+                    signerCertificates: checked.certificates)
             } catch {
                 let unsupported = (error as? PDFCertificateError).map { if case .unsupportedSignature = $0 { return true }; return false } ?? false
                 return PDFCertificateValidation(fieldName: entry.name, signerName: "Unknown signer", integrity: unsupported ? .unsupported : .invalid,
-                                                trust: .notEvaluated, coversWholeFile: false, detail: error.localizedDescription)
+                                                trust: .notEvaluated, coversWholeFile: false, detail: error.localizedDescription, signerCertificates: [])
             }
         }
     }
