@@ -4,3 +4,18 @@ build/
 .DS_Store
 *.xcuserstate
 TestResults/
+
+# Secrets and signing material
+.env
+.env.*
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+
+# Claude Code session state (agents and commands are shared)
+.claude/plans/
+.claude/projects/
+.claude/todos/
+.claude/memory/
+.claude/worktrees/
