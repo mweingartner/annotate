@@ -53,6 +53,7 @@ final class PDFNativeTextProgram {
         static let maximumFonts = 1_000
         private(set) var forms = 0, operations = 0, bytes = 0
         private var fonts: [UInt: PDFNativeFont] = [:]
+        let tokens = PDFNativeTokenBudget()
         init() {}
         func read(_ data: Data, operations count: Int, form: Bool) throws {
             if form { forms += 1 }
@@ -67,7 +68,7 @@ final class PDFNativeTextProgram {
             let key = UInt(bitPattern: dictionary.rawValue)
             if let font = fonts[key] { return font }
             guard fonts.count < Self.maximumFonts else { throw PDFNativeTextError.unsupported("The page uses more fonts than can be edited safely.") }
-            let font = try PDFNativeFont(dictionary)
+            let font = try PDFNativeFont(dictionary, tokens: tokens)
             fonts[key] = font
             return font
         }
@@ -139,7 +140,7 @@ final class PDFNativeTextProgram {
          ancestors: Set<UInt> = [], depth: Int = 0, work: Work = Work()) throws {
         guard depth < 24 else { throw PDFNativeTextError.unsupported("The page's nested form depth exceeds the editing limit.") }
         self.data = data; self.resources = resources; self.sourceStream = sourceStream
-        var lexer = PDFNativeLexer(data)
+        var lexer = PDFNativeLexer(data, budget: work.tokens)
         operations = try lexer.operations()
         try work.read(data, operations: operations.count, form: depth > 0)
         var state = initial, stack: [State] = [], activeTextShows: [Int]? = nil

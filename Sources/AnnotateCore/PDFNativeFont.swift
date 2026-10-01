@@ -11,8 +11,9 @@ func nativeArrayNumber(_ array: CGPDFArrayRef, _ index: Int) -> Double? { var va
 /// Whether decoding `stream` expands it by a bounded factor. Core Graphics decodes a
 /// stream completely before its size can be checked, and chained compression filters
 /// multiply: two Flate passes can turn kilobytes into gigabytes. One compression filter
-/// (about 1000:1 at most for Flate) is accepted; a chain of them is not, and a fax or
-/// JBIG2 image must state a size within the decoding limit.
+/// (about 1000:1 at most for Flate) is accepted; a chain of them is not. A fax or JBIG2
+/// image must state a size within the decoding limit, and a fax image's own decoding
+/// parameters must agree with it.
 func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
     guard let dictionary = CGPDFStreamGetDictionary(stream) else { return false }
     let bitmapExpanding: Set<String> = ["CCITTFaxDecode", "CCF", "JBIG2Decode"]
@@ -30,10 +31,23 @@ func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
     guard filters.filter(compressing.contains).count <= 1 else { return false }
     // Fax and JBIG2 images expand a few bytes into a page-sized bitmap: the image's own
     // size must be stated, and be within what a stream may decode to, before decoding.
-    if filters.contains(where: bitmapExpanding.contains) {
+    if let position = filters.firstIndex(where: bitmapExpanding.contains) {
         guard let width = nativeNumber(dictionary, "Width"), let height = nativeNumber(dictionary, "Height"),
               width.isFinite, height.isFinite, width > 0, height > 0,
               (width / 8).rounded(.up) * height <= 64 * 1_024 * 1_024 else { return false }
+        // A fax decoder sizes its output from its own parameters, not the image's: they
+        // must agree with the stated size, and the rows must be stated, or the stream
+        // could decode to gigabytes. (A JBIG2 stream states its size inside the encoded
+        // data, out of reach before decoding; Core Graphics refuses the largest ones.)
+        if ["CCITTFaxDecode", "CCF"].contains(filters[position]) {
+            var parameters: CGPDFDictionaryRef? = nativeDictionary(dictionary, "DecodeParms")
+            if let array = nativeArray(dictionary, "DecodeParms") {
+                var entry: CGPDFDictionaryRef?
+                parameters = CGPDFArrayGetDictionary(array, position, &entry) ? entry : nil
+            }
+            let columns = parameters.flatMap { nativeNumber($0, "Columns") } ?? 1728
+            guard columns == width, let rows = parameters.flatMap({ nativeNumber($0, "Rows") }), rows == height else { return false }
+        }
     }
     return true
 }
@@ -84,7 +98,8 @@ struct PDFNativeFont {
     /// The font descriptor's flags (fixed pitch 1, serif 2, italic 64, force bold 262144).
     let flags: Int
 
-    init(_ dictionary: CGPDFDictionaryRef) throws {
+    /// `tokens` is the page's shared parsing allowance, which the font's maps draw on.
+    init(_ dictionary: CGPDFDictionaryRef, tokens: PDFNativeTokenBudget? = nil) throws {
         let subtype = nativeName(dictionary, "Subtype") ?? ""
         guard subtype != "Type3" else { throw PDFNativeTextError.unsupported("Type 3 glyph programs cannot yet be edited safely.") }
         baseName = nativeName(dictionary, "BaseFont") ?? "Unknown"
@@ -122,7 +137,7 @@ struct PDFNativeFont {
                 }
             }
             if let encoding = nativeStream(dictionary, "Encoding") {
-                let map = try Self.cmap(try nativeDecodedStream(encoding))
+                let map = try Self.cmap(try nativeDecodedStream(encoding), tokens: tokens)
                 guard !map.vertical else { throw PDFNativeTextError.unsupported("Vertical-writing CMaps are not yet supported for source text replacement.") }
                 cidMap = map.cids
                 if !map.lengths.isEmpty { codeLengths = map.lengths }
@@ -180,7 +195,7 @@ struct PDFNativeFont {
         ascent = descriptor.flatMap { nativeNumber($0, "Ascent") } ?? 800
         descent = descriptor.flatMap { nativeNumber($0, "Descent") } ?? -200
         if let map = nativeStream(dictionary, "ToUnicode") {
-            let parsed = try Self.cmap(try nativeDecodedStream(map))
+            let parsed = try Self.cmap(try nativeDecodedStream(map), tokens: tokens)
             // The font's encoding decides how strings split into character codes, as it does
             // for the renderer: one byte for simple fonts, the encoding CMap's lengths for
             // composite ones. The ToUnicode map only names the codes.
@@ -223,11 +238,11 @@ struct PDFNativeFont {
         var lengths: [Int] = []
         var vertical = false
     }
-    static func cmap(_ data: Data) throws -> CMap {
+    static func cmap(_ data: Data, tokens budget: PDFNativeTokenBudget? = nil) throws -> CMap {
         // Bound expansion work, including repeated/overlapping mappings. Limiting
         // each range alone permits a tiny CMap to perform billions of updates.
         guard data.count <= 16 * 1024 * 1024 else { throw PDFNativeTextError.malformed("The font CMap is too large.") }
-        var lexer = PDFNativeLexer(data), tokens: [PDFNativeToken] = []
+        var lexer = PDFNativeLexer(data, budget: budget), tokens: [PDFNativeToken] = []
         while let token = try lexer.next() {
             guard tokens.count < 262_144 else { throw PDFNativeTextError.malformed("The font CMap has too many tokens.") }
             tokens.append(token)

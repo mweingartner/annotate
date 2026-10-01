@@ -75,6 +75,22 @@ struct NativeHardeningTests {
         #expect((try? ordinary.operations())?.count == 5)
     }
 
+    @Test("A form drawn many times shares one token allowance: the page's, not one per drawing")
+    func tokensSharedAcrossForms() throws {
+        // Each drawing of the form reads a million-token array; twelve drawings exceed the page's allowance.
+        let array = "[" + String(repeating: "1 ", count: 1_000_000) + "] pop"
+        let drawings = String(repeating: "/Fm Do ", count: 12)
+        let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Fm 4 0 R >> >> /Contents 5 0 R >>",
+            HandPDF.stream(array, "/Type /XObject /Subtype /Form /BBox [0 0 1 1]"), HandPDF.stream(drawings)])
+        let (owner, page) = try HandPDF.page(data)
+        try withExtendedLifetime(owner) {
+            #expect(throws: PDFNativeTextError.self) {
+                try PDFNativeTextProgram(data: Data(drawings.utf8), resources: PDFNativeTextEditor.inheritedResources(page))
+            }
+        }
+    }
+
     @Test("A name that isn't plain printable ASCII stops editing rather than being matched loosely",
           arguments: ["/Im#E9 Do", "/Im#C3#A9 Do", "/Im#00x Do", "/Im#20x Do", "/Im\u{E9} Do"])
     func nonASCIINamesRefused(content: String) {
@@ -160,7 +176,11 @@ struct NativeHardeningTests {
                       ("/Filter /FlateDecode", true), ("/Filter [/ASCIIHexDecode /FlateDecode]", true), ("", true),
                       // Fax and JBIG2 images must state a size within the decoding limit first.
                       ("/Filter /CCITTFaxDecode /Width 100000 /Height 100000", false), ("/Filter /JBIG2Decode /Width 100000 /Height 100000", false),
-                      ("/Filter /CCITTFaxDecode", false), ("/Filter /CCF /Width 2550 /Height 3300", true),
+                      ("/Filter /CCITTFaxDecode", false), ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 2550 /Rows 3300 >>", true),
+                      // The fax decoder sizes its output from its own parameters: they must match the image.
+                      ("/Filter /CCITTFaxDecode /Width 1 /Height 1 /DecodeParms << /K -1 /Columns 1000000 >>", false),
+                      ("/Filter /CCITTFaxDecode /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 2550 >>", false),
+                      ("/Filter [/ASCIIHexDecode /CCITTFaxDecode] /Width 1728 /Height 2200 /DecodeParms [null << /K -1 /Rows 2200 >>]", true),
                       ("/Filter [/FlateDecode /CCITTFaxDecode] /Width 2550 /Height 3300", false)])
     func chainedCompression(filter: String, bounded: Bool) throws {
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R /Crafted 6 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

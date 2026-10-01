@@ -142,6 +142,7 @@ public enum PDFNativeImageEditor {
 
     private final class ProgramBudget {
         var instances = 0, operations = 0, bytes = 0, images = 0
+        let tokens = PDFNativeTokenBudget()
         func begin(bytes count: Int) throws {
             instances += 1
             guard instances <= 2_000, count <= 128 * 1_024 * 1_024 - bytes else { throw PDFNativeImageError.unsupported("The page exceeds the safe image/form expansion limit.") }
@@ -263,7 +264,7 @@ public enum PDFNativeImageEditor {
             guard path.count < 24, data.count <= 64 * 1_024 * 1_024 else { throw PDFNativeImageError.unsupported("The image content exceeds safe editing limits.") }
             try budget.begin(bytes: data.count)
             self.data = data; self.resources = resources; self.stream = stream
-            var lexer = PDFNativeLexer(data)
+            var lexer = PDFNativeLexer(data, budget: budget.tokens)
             do { operations = try lexer.operations() }
             catch { throw PDFNativeImageError.unsupported("This page's content cannot be parsed for image editing. Inline images and malformed content are not supported.") }
             try budget.add(operations: operations.count)

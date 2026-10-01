@@ -15,6 +15,19 @@ struct PDFNativeOperation {
     let range: Range<Int>
 }
 
+/// Tokens shared by everything read for one page (its content, every form it draws, and
+/// its fonts' maps), so drawing one form many times can't multiply a stream's own limit.
+final class PDFNativeTokenBudget {
+    static let pageLimit = 8_000_000
+    let limit: Int
+    private(set) var used = 0
+    init(limit: Int = PDFNativeTokenBudget.pageLimit) { self.limit = limit }
+    func spend() throws {
+        used += 1
+        guard used <= limit else { throw PDFNativeTextError.unsupported("This page's content exceeds the safe parsing limit.") }
+    }
+}
+
 struct PDFNativeLexer {
     /// Tokens one stream may hold, and operands one operator may take. Every token is a
     /// separate allocation: a 64 MB stream of bare numbers would otherwise cost gigabytes
@@ -23,7 +36,9 @@ struct PDFNativeLexer {
     let bytes: [UInt8]
     var index = 0
     private var tokens = 0
-    init(_ data: Data) { bytes = Array(data) }
+    /// The page's shared allowance, when this stream is read as part of a page.
+    var budget: PDFNativeTokenBudget?
+    init(_ data: Data, budget: PDFNativeTokenBudget? = nil) { bytes = Array(data); self.budget = budget }
     init(bytes: [UInt8]) { self.bytes = bytes }
     static func whitespace(_ byte: UInt8) -> Bool { [0, 9, 10, 12, 13, 32].contains(byte) }
     static func delimiter(_ byte: UInt8) -> Bool { whitespace(byte) || [40, 41, 60, 62, 91, 93, 123, 125, 47, 37].contains(byte) }
@@ -39,6 +54,7 @@ struct PDFNativeLexer {
         skip(); guard index < bytes.count else { return nil }
         tokens += 1
         guard tokens <= Self.maximumTokens else { throw PDFNativeTextError.unsupported("This page's content exceeds the safe parsing limit.") }
+        try budget?.spend()
         let byte = bytes[index]; index += 1
         if byte == 40 {
             var result: [UInt8] = [], nesting = 1
