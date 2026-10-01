@@ -24,27 +24,31 @@ public final class DocumentAssistantController {
     @discardableResult
     public func submit(document: PDFDocument, revision: Int = 0, operation: DocumentAssistantOperation,
                        question: String = "", selectedSources: [DocumentAssistantSource] = [], language: String = "English",
-                       provider: DocumentAssistantProvider, localModel: (any DocumentAssistantGenerating)? = nil,
+                       provider: DocumentAssistantProvider, settingsFingerprint: String = "",
+                       localModel: (any DocumentAssistantGenerating)? = nil,
                        modelName: String? = nil) -> Task<Void, Never> {
-        selectProvider(provider)
         let preparation = prepare(document: document, revision: revision, operation: operation,
-                                  question: question, selectedSources: selectedSources, language: language)
+                                  question: question, selectedSources: selectedSources, language: language,
+                                  provider: provider, settingsFingerprint: settingsFingerprint)
         guard !provider.requiresAPIKey, operation != .evidence, let localModel else { return preparation }
         let token = generation
         return Task { @MainActor [weak self] in
             await preparation.value
             guard !Task.isCancelled, let self, self.generation == token, self.prepared != nil else { return }
             let name = modelName.map { provider.label + " · " + $0 } ?? provider.label
-            await self.generate(using: localModel, providerName: name).value
+            await self.generate(using: localModel, providerName: name, settingsFingerprint: settingsFingerprint).value
         }
     }
 
     /// Preparation is local and does not access API keys or contact any model provider.
+    /// The prepared request records the provider and settings it is reviewed for.
     @discardableResult
     public func prepare(document: PDFDocument, revision: Int = 0, operation: DocumentAssistantOperation,
                         question: String = "", selectedSources: [DocumentAssistantSource] = [],
-                        language: String = "English") -> Task<Void, Never> {
+                        language: String = "English", provider: DocumentAssistantProvider,
+                        settingsFingerprint: String = "") -> Task<Void, Never> {
         if self.document !== document || documentRevision != revision { reset() }
+        selectProvider(provider)
         cancel()
         self.document = document
         documentRevision = revision
@@ -97,7 +101,8 @@ public final class DocumentAssistantController {
                 }
                 try Task.checkCancellation()
                 guard self.generation == token, self.document === document else { return }
-                let request = DocumentAssistantRequest(operation: operation, question: currentQuestion,
+                let request = DocumentAssistantRequest(provider: provider, settingsFingerprint: settingsFingerprint,
+                    operation: operation, question: currentQuestion,
                     previousQuestion: followUpQuestion, language: language, sources: sources, coverage: coverage)
                 if operation == .evidence {
                     self.append(.init(title: request.title, content: "Verbatim source passages are listed below. No AI model was used.",
@@ -114,9 +119,16 @@ public final class DocumentAssistantController {
     }
 
     /// Cloud generation requires the user to review passages, provider, and request budget.
+    /// A request is sent only through the provider, and with the settings, it was reviewed for.
     @discardableResult
-    public func generate(using model: any DocumentAssistantGenerating, providerName: String) -> Task<Void, Never> {
+    public func generate(using model: any DocumentAssistantGenerating, providerName: String,
+                         settingsFingerprint: String = "") -> Task<Void, Never> {
         guard let request = prepared, let document else { return Task {} }
+        guard model.provider == request.provider, settingsFingerprint == request.settingsFingerprint else {
+            cancel()
+            errorMessage = DocumentAssistantError.reviewedForAnotherProvider.localizedDescription
+            return Task {}
+        }
         cancel(keepPrepared: true)
         let token = generation
         errorMessage = nil

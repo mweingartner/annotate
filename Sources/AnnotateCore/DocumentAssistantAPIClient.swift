@@ -75,7 +75,8 @@ public final class DocumentAssistantAPIClient: DocumentAssistantGenerating {
             body = ["model": model, "instructions": instructions, "input": prompt,
                     "max_output_tokens": limit, "store": false, "stream": false, "truncation": "disabled"]
         case .claude:
-            request.setValue("Bearer \(apiKey ?? "")", forHTTPHeaderField: "Authorization")
+            // The Messages API authenticates with x-api-key, never an Authorization header.
+            request.setValue(apiKey ?? "", forHTTPHeaderField: "x-api-key")
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             if !workspaceID.isEmpty {
                 guard workspaceID.utf8.count <= 256,
@@ -187,18 +188,29 @@ public final class DocumentAssistantAPIClient: DocumentAssistantGenerating {
         case .claude: return URL(string: "https://api.anthropic.com/v1/messages")!
         case .apple: throw DocumentAssistantError.unavailable("The Apple provider does not use HTTP.")
         case .ollama:
-            guard var components = URLComponents(string: ollamaBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
-                  ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
-                  ["localhost", "127.0.0.1", "[::1]", "::1"].contains(components.host?.lowercased() ?? ""),
+            // URLComponents.host is percent-decoded, so an encoded host is refused outright,
+            // and the request goes to a fixed loopback address rather than the typed host.
+            guard let components = URLComponents(string: ollamaBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
+                  let encodedHost = components.percentEncodedHost, !encodedHost.contains("%"),
+                  let host = Self.loopbackHosts[encodedHost.lowercased()],
                   components.user == nil, components.password == nil, components.query == nil,
-                  components.fragment == nil, components.path.isEmpty || components.path == "/" else {
+                  components.fragment == nil, components.path.isEmpty || components.path == "/",
+                  (components.port.map { (1...65_535).contains($0) } ?? true) else {
                 throw DocumentAssistantError.unavailable("Ollama must use a local address such as http://localhost:11434, with no path, credentials, or query.")
             }
-            components.path = path
-            guard let url = components.url else { throw DocumentAssistantError.unavailable("The Ollama address is invalid.") }
+            var canonical = URLComponents()
+            canonical.scheme = scheme
+            canonical.percentEncodedHost = host
+            canonical.port = components.port
+            canonical.path = path
+            guard let url = canonical.url else { throw DocumentAssistantError.unavailable("The Ollama address is invalid.") }
             return url
         }
     }
+
+    /// Accepted spellings of this Mac's loopback address, each mapped to the fixed host actually contacted.
+    private static let loopbackHosts = ["localhost": "127.0.0.1", "127.0.0.1": "127.0.0.1", "[::1]": "[::1]", "::1": "[::1]"]
 
     private static func statusDescription(_ code: Int, provider: DocumentAssistantProvider) -> String {
         switch code {
