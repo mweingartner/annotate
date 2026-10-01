@@ -32,21 +32,32 @@ func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
     // Fax and JBIG2 images expand a few bytes into a page-sized bitmap: the image's own
     // size must be stated, and be within what a stream may decode to, before decoding.
     if let position = filters.firstIndex(where: bitmapExpanding.contains) {
-        guard let width = nativeNumber(dictionary, "Width"), let height = nativeNumber(dictionary, "Height"),
-              width.isFinite, height.isFinite, width > 0, height > 0,
-              (width / 8).rounded(.up) * height <= 64 * 1_024 * 1_024 else { return false }
+        // Integers only, as decoders read them: a real "1000.0" would pass a numeric check
+        // yet count as missing to the decoder.
+        func integer(_ dictionary: CGPDFDictionaryRef?, _ key: String) -> Int? {
+            var value: CGPDFInteger = 0
+            guard let dictionary, CGPDFDictionaryGetInteger(dictionary, key, &value), value >= 1 else { return nil }
+            return value
+        }
+        guard let width = integer(dictionary, "Width"), let height = integer(dictionary, "Height"),
+              (width + 7) / 8 <= 64 * 1_024 * 1_024 / height else { return false }
         // A fax decoder sizes its output from its own parameters, not the image's: they
         // must agree with the stated size, and the rows must be stated, or the stream
-        // could decode to gigabytes. (A JBIG2 stream states its size inside the encoded
-        // data, out of reach before decoding; Core Graphics refuses the largest ones.)
+        // could decode to gigabytes. The parameters must be shaped like the filters, so
+        // the decoder reads the same ones. (A JBIG2 stream states its size inside the
+        // encoded data, out of reach before decoding; Core Graphics refuses the largest.)
         if ["CCITTFaxDecode", "CCF"].contains(filters[position]) {
-            var parameters: CGPDFDictionaryRef? = nativeDictionary(dictionary, "DecodeParms")
-            if let array = nativeArray(dictionary, "DecodeParms") {
+            let parameters: CGPDFDictionaryRef?
+            if nativeName(dictionary, "Filter") != nil {
+                parameters = nativeDictionary(dictionary, "DecodeParms")
+            } else {
+                guard let array = nativeArray(dictionary, "DecodeParms"), CGPDFArrayGetCount(array) == filters.count else { return false }
                 var entry: CGPDFDictionaryRef?
                 parameters = CGPDFArrayGetDictionary(array, position, &entry) ? entry : nil
             }
-            let columns = parameters.flatMap { nativeNumber($0, "Columns") } ?? 1728
-            guard columns == width, let rows = parameters.flatMap({ nativeNumber($0, "Rows") }), rows == height else { return false }
+            var columnsGiven: CGPDFObjectRef?
+            let columns = parameters.flatMap { CGPDFDictionaryGetObject($0, "Columns", &columnsGiven) ? integer($0, "Columns") : 1728 }
+            guard columns == width, integer(parameters, "Rows") == height else { return false }
         }
     }
     return true

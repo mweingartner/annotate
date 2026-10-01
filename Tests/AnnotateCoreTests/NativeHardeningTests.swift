@@ -181,6 +181,13 @@ struct NativeHardeningTests {
                       ("/Filter /CCITTFaxDecode /Width 1 /Height 1 /DecodeParms << /K -1 /Columns 1000000 >>", false),
                       ("/Filter /CCITTFaxDecode /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 2550 >>", false),
                       ("/Filter [/ASCIIHexDecode /CCITTFaxDecode] /Width 1728 /Height 2200 /DecodeParms [null << /K -1 /Rows 2200 >>]", true),
+                      // Values the decoder reads differently, and parameters shaped unlike the filters.
+                      ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 2550 /Rows 3300.0 >>", false),
+                      ("/Filter /CCF /Width 2550.5 /Height 3300 /DecodeParms << /K -1 /Columns 2550 /Rows 3300 >>", false),
+                      ("/Filter [/AHx /CCF] /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 2550 /Rows 3300 >>", false),
+                      ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms [<< /K -1 /Columns 2550 /Rows 3300 >>]", false),
+                      ("/Filter [/AHx /CCF] /Width 2550 /Height 3300 /DecodeParms [<< /K -1 /Columns 2550 /Rows 3300 >>]", false),
+                      ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 0 /Rows 3300 >>", false),
                       ("/Filter [/FlateDecode /CCITTFaxDecode] /Width 2550 /Height 3300", false)])
     func chainedCompression(filter: String, bounded: Bool) throws {
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R /Crafted 6 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

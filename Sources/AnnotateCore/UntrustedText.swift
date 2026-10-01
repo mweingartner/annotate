@@ -14,7 +14,7 @@ public enum UntrustedText {
         var scalars = String.UnicodeScalarView()
         var pendingSpace = false
         // One character can stack thousands of combining marks; bound the scalars too.
-        let scalarLimit = limit * 4
+        let scalarLimit = min(limit, 1_000_000) * 4
         var keptScalars = 0
         for scalar in text.unicodeScalars {
             if keptScalars >= scalarLimit { return String(scalars).prefix(limit - 1).trimmingCharacters(in: .whitespaces) + "…" }
