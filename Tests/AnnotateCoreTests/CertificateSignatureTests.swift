@@ -17,7 +17,75 @@ struct CertificateSignatureTests {
         #expect(cms[1] != 0x80, "CMS must use definite-length DER, not indefinite-length BER.")
         let checked = try PDFCertificateCMS.verify(cms, content: content, anchors: [fixture.certificate])
         #expect(checked.intact)
-        #expect(checked.trusted)
+        #expect(checked.trust == .trusted)
+        #expect(checked.certificates.count == 1)
+        #expect(checked.certificates.first?.issuer == "Annotate Disposable Test Certificate")
+        #expect(checked.certificates.first?.fingerprint == PDFCertificateX509.fingerprint(fixture.certificate))
+    }
+
+    @Test("A trusted certificate with no usage restriction, or issued for signing documents, is trusted for signing", arguments: [
+        [], ["extendedKeyUsage=emailProtection"], ["extendedKeyUsage=1.3.6.1.5.5.7.3.36"],
+        ["extendedKeyUsage=serverAuth,1.3.6.1.4.1.311.10.3.12"], ["extendedKeyUsage=1.2.840.113583.1.1.5"],
+        ["extendedKeyUsage=2.5.29.37.0"], ["keyUsage=critical,nonRepudiation"],
+        ["keyUsage=critical,digitalSignature,keyEncipherment", "extendedKeyUsage=critical,emailProtection"]
+    ])
+    func issuedForSigning(extensions: [String]) throws {
+        let fixture = try CertificateFixture(extensions: extensions)
+        defer { fixture.cleanUp() }
+        let content = Data("Disposable synthetic evidence".utf8)
+        let cms = try PDFCertificateCMS.sign(content, identity: fixture.identity)
+        let checked = try PDFCertificateCMS.verify(cms, content: content, anchors: [fixture.certificate])
+        #expect(checked.intact)
+        #expect(checked.trust == .trusted)
+    }
+
+    @Test("A trusted chain whose certificate wasn't issued for signing documents is never reported as trusted", arguments: [
+        ["extendedKeyUsage=serverAuth"], ["extendedKeyUsage=serverAuth,clientAuth,codeSigning"],
+        ["keyUsage=critical,keyEncipherment"], ["keyUsage=critical,keyCertSign,cRLSign", "extendedKeyUsage=emailProtection"]
+    ])
+    func notIssuedForSigning(extensions: [String]) throws {
+        let fixture = try CertificateFixture(extensions: extensions)
+        defer { fixture.cleanUp() }
+        let content = Data("Disposable synthetic evidence".utf8)
+        let cms = try PDFCertificateCMS.sign(content, identity: fixture.identity)
+        let anchored = try PDFCertificateCMS.verify(cms, content: content, anchors: [fixture.certificate])
+        #expect(anchored.intact)
+        #expect(anchored.trust == .notIssuedForSigning)
+        #expect(anchored.detail.contains("chains to a root this Mac trusts, but it wasn't issued for signing documents"))
+        // Without a trusted chain, the chain is the first problem to report.
+        #expect(try PDFCertificateCMS.verify(cms, content: content).trust == .untrusted)
+    }
+
+    @Test("A web server certificate signing a PDF is reported as not issued for signing, with its issuer and fingerprint")
+    func serverCertificatePDF() throws {
+        let fixture = try CertificateFixture(extensions: ["extendedKeyUsage=serverAuth"])
+        defer { fixture.cleanUp() }
+        let signed = try PDFCertificateSignature.signedData(document: SamplePDF.make(), identity: fixture.identity)
+        let report = try #require(PDFCertificateSignature.validate(data: signed, anchors: [fixture.certificate]).first)
+        #expect(report.integrity == .intact)
+        #expect(report.trust == .notIssuedForSigning)
+        #expect(report.status == "Signature intact · certificate not issued for signing documents")
+        let certificate = try #require(report.signerCertificates.first)
+        #expect(certificate.subject == "Annotate Disposable Test Certificate")
+        #expect(certificate.issuer == "Annotate Disposable Test Certificate")
+        // Independent fingerprint: OpenSSL hashes the same DER certificate.
+        try CertificateFixture.openssl(["x509", "-in", "certificate.pem", "-outform", "DER", "-out", "certificate.der"], in: fixture.directory)
+        try CertificateFixture.openssl(["dgst", "-sha256", "-out", "fingerprint.txt", "certificate.der"], in: fixture.directory)
+        let printed = try String(contentsOf: fixture.directory.appendingPathComponent("fingerprint.txt"), encoding: .utf8)
+        let digest = try #require(printed.split(separator: "=").last).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(digest.uppercased() == certificate.fingerprint.replacingOccurrences(of: ":", with: ""))
+    }
+
+    @Test("Only a trusted certificate issued for signing documents reads as trusted", arguments: [
+        (PDFCertificateValidation.Trust.trusted, "Signature intact · trusted certificate"),
+        (.notIssuedForSigning, "Signature intact · certificate not issued for signing documents"),
+        (.untrusted, "Signature intact · certificate not trusted"),
+        (.notEvaluated, "Signature intact · certificate not trusted")
+    ])
+    func trustStatus(trust: PDFCertificateValidation.Trust, status: String) {
+        let report = PDFCertificateValidation(fieldName: "Signature", signerName: "Signer", integrity: .intact, trust: trust,
+                                              coversWholeFile: true, detail: "", signerCertificates: [])
+        #expect(report.status == status)
     }
 
     @Test("An intact signature on embedded content cannot authenticate unrelated PDF bytes")
