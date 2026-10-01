@@ -330,13 +330,15 @@ public enum PDFNativeImageEditor {
             // A Form without its own Resources can still resolve names from this
             // dictionary. Keep a name used by such an unchanged descendant.
             // Other names for the same object go too, unless something still draws them.
-            PDFNativeTextProgram.prune(oldName, from: &objects, keeping: added) { alias in
-                let inheritedUse = forms.contains { other, form in
-                    guard other != index, let stream = form.stream, let dictionary = CGPDFStreamGetDictionary(stream), nativeDictionary(dictionary, "Resources") == nil else { return false }
-                    return form.usesInheritedName(alias)
-                }
-                return inheritedUse || operations.enumerated().contains { other, operation in other != index && operation.name == "Do" && operation.operands.first?.name == alias }
+            // Gathered once, so pruning many aliases stays linear in the page's operations.
+            var stillDrawn = Set(operations.indices.compactMap { other in
+                other != index && operations[other].name == "Do" ? operations[other].operands.first?.name : nil
+            })
+            for (other, form) in forms where other != index {
+                guard let stream = form.stream, let dictionary = CGPDFStreamGetDictionary(stream), nativeDictionary(dictionary, "Resources") == nil else { continue }
+                stillDrawn.formUnion(form.inheritedNames())
             }
+            PDFNativeTextProgram.prune(oldName, from: &objects, keeping: added) { stillDrawn.contains($0) }
             values["XObject"] = .dictionary(objects)
             let operation = operations[index], bytes = Array(data)
             var result = Data(bytes[..<operation.range.lowerBound]); result.append(Data(replacement.utf8)); result.append(contentsOf: bytes[operation.range.upperBound...])
@@ -355,11 +357,15 @@ public enum PDFNativeImageEditor {
         private static func arrayMatrix(_ array: CGPDFArrayRef) throws -> CGAffineTransform {
             try matrix(numbers(array, count: 6).map(PDFNativeToken.number))
         }
-        private func usesInheritedName(_ name: String) -> Bool {
-            operations.contains { $0.name == "Do" && $0.operands.first?.name == name } || forms.values.contains { form in
-                guard let stream = form.stream, let dictionary = CGPDFStreamGetDictionary(stream), nativeDictionary(dictionary, "Resources") == nil else { return false }
-                return form.usesInheritedName(name)
+        /// The names this form draws from inherited resources: its own, and those of forms
+        /// without resources of their own that it draws.
+        private func inheritedNames() -> Set<String> {
+            var names = Set(operations.compactMap { $0.name == "Do" ? $0.operands.first?.name : nil })
+            for form in forms.values {
+                guard let stream = form.stream, let dictionary = CGPDFStreamGetDictionary(stream), nativeDictionary(dictionary, "Resources") == nil else { continue }
+                names.formUnion(form.inheritedNames())
             }
+            return names
         }
     }
 }

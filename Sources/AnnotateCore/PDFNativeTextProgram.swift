@@ -107,12 +107,17 @@ final class PDFNativeTextProgram {
         for alias in aliases where alias != added && !stillDrawn(alias) { objects.removeValue(forKey: alias) }
     }
 
-    /// Whether a form drawn here, at any depth, draws `name`: such a form may be using
-    /// this content's resources, so an alias it draws must stay.
-    func formsDraw(_ name: String) -> Bool {
-        forms.values.contains { form in
-            form.operations.contains { $0.name == "Do" && $0.operands.first?.name == name } || form.formsDraw(name)
+    /// The names forms drawn here, at any depth, draw from this content's resources, so
+    /// they must stay. Only an unchanged form without resources of its own resolves names
+    /// here: a form with its own resolves them there, and a changed form is written back
+    /// with resources of its own. Gathered once, so pruning many aliases stays linear.
+    func namesDrawnByForms() -> Set<String> {
+        var names: Set<String> = []
+        for form in forms.values where !form.hasChanges && form.resources == resources {
+            for operation in form.operations where operation.name == "Do" { if let name = operation.operands.first?.name { names.insert(name) } }
+            names.formUnion(form.namesDrawnByForms())
         }
+        return names
     }
     let data: Data
     let operations: [PDFNativeOperation]
@@ -314,6 +319,14 @@ final class PDFNativeTextProgram {
             guard moving[insertion.after] == nil else { throw PDFNativeTextError.unsupported("The edited text shares a drawing unit with content that has to move.") }
             replacements[insertion.after] = "ET\nq \(values) cm /\(name) Do Q\n"
         }
+        // What unchanged drawing still uses, gathered once for every alias pruned below.
+        let drawnByForms = images.values.contains(where: { $0.replacement != nil }) || forms.values.contains(where: \.hasChanges) ? namesDrawnByForms() : []
+        let drawnByUnchangedImages = Set(operations.indices.compactMap { other in
+            operations[other].name == "Do" && images[other]?.replacement == nil ? operations[other].operands.first?.name : nil
+        })
+        let drawnByUnchangedForms = Set(operations.indices.compactMap { other in
+            operations[other].name == "Do" && !(forms[other]?.hasChanges ?? false) ? operations[other].operands.first?.name : nil
+        })
         for (index, image) in images {
             guard let reference = image.replacement else { continue }
             var objects: [String: PDFNativeValue] = [:]
@@ -322,10 +335,7 @@ final class PDFNativeTextProgram {
             while objects[name] != nil { name += "x" }
             objects[name] = reference
             if let oldName = operations[index].operands.first?.name {
-                Self.prune(oldName, from: &objects, keeping: name) { alias in
-                    operations.enumerated().contains { other, operation in operation.name == "Do" && operation.operands.first?.name == alias && images[other]?.replacement == nil }
-                        || (alias != oldName && formsDraw(alias))
-                }
+                Self.prune(oldName, from: &objects, keeping: name) { drawnByUnchangedImages.contains($0) || drawnByForms.contains($0) }
             }
             resourceValues["XObject"] = .dictionary(objects); replacements[index] = "/\(name) Do"
         }
@@ -359,11 +369,7 @@ final class PDFNativeTextProgram {
             while objects[name] != nil { name += "x" }
             objects[name] = reference
             if let oldName = operations[index].operands.first?.name {
-                Self.prune(oldName, from: &objects, keeping: name) { alias in
-                    operations.enumerated().contains { otherIndex, operation in
-                        operation.name == "Do" && operation.operands.first?.name == alias && !(forms[otherIndex]?.hasChanges ?? false)
-                    } || (alias != oldName && formsDraw(alias))
-                }
+                Self.prune(oldName, from: &objects, keeping: name) { drawnByUnchangedForms.contains($0) || drawnByForms.contains($0) }
             }
             resourceValues["XObject"] = .dictionary(objects)
             replacements[index] = "/\(name) Do"

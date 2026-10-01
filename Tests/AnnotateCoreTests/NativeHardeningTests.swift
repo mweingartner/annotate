@@ -6,7 +6,8 @@ import Testing
 
 /// A one-page PDF written object by object, so a test can place exactly the structure a
 /// crafted file would. Object 1 is the catalog and 2 the page tree; the page is object 3.
-private enum HandPDF {
+/// Shared with NativeHardeningDepthTests.
+enum HandPDF {
     static func data(_ objects: [String]) -> Data {
         var data = Data("%PDF-1.7\n".utf8), offsets: [Int] = []
         for (index, object) in objects.enumerated() {
