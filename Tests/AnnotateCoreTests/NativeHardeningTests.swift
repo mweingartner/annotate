@@ -188,6 +188,8 @@ struct NativeHardeningTests {
                       ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms [<< /K -1 /Columns 2550 /Rows 3300 >>]", false),
                       ("/Filter [/AHx /CCF] /Width 2550 /Height 3300 /DecodeParms [<< /K -1 /Columns 2550 /Rows 3300 >>]", false),
                       ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 0 /Rows 3300 >>", false),
+                      // The largest integer a PDF can state must not overflow the size arithmetic.
+                      ("/Filter /CCF /Width 9223372036854775807 /Height 1 /DecodeParms << /K -1 /Columns 9223372036854775807 /Rows 1 >>", false),
                       ("/Filter [/FlateDecode /CCITTFaxDecode] /Width 2550 /Height 3300", false)])
     func chainedCompression(filter: String, bounded: Bool) throws {
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R /Crafted 6 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

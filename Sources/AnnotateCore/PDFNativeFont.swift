@@ -40,7 +40,7 @@ func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
             return value
         }
         guard let width = integer(dictionary, "Width"), let height = integer(dictionary, "Height"),
-              (width + 7) / 8 <= 64 * 1_024 * 1_024 / height else { return false }
+              (width - 1) / 8 + 1 <= 64 * 1_024 * 1_024 / height else { return false }
         // A fax decoder sizes its output from its own parameters, not the image's: they
         // must agree with the stated size, and the rows must be stated, or the stream
         // could decode to gigabytes. The parameters must be shaped like the filters, so
