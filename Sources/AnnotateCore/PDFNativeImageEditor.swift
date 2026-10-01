@@ -206,6 +206,8 @@ public enum PDFNativeImageEditor {
             let (data, resources) = try program.rewritten(path: path, edit: edit, graph: graph)
             guard case .dictionary(var values)? = graph[pageID] else { throw PDFNativeImageError.cannotWrite }
             values["Contents"] = try graph.appendStream(data: data, dictionary: [:]); values["Resources"] = .dictionary(resources)
+            // A stored thumbnail would still show the page as it was before the edit.
+            values.removeValue(forKey: "Thumb")
             graph[pageID] = .dictionary(values)
             guard let result = PDFDocument(data: try graph.write()), result.pageCount == original.pageCount,
                   result.page(at: pageIndex)?.rotation == original.page(at: pageIndex)?.rotation,
@@ -304,7 +306,7 @@ public enum PDFNativeImageEditor {
             if let resources, case .dictionary(let imported) = try graph.resolved(graph.importDictionary(resources)) { values = imported }
             var objects: [String: PDFNativeValue] = [:]
             if let existing = values["XObject"], case .dictionary(let imported) = try graph.resolved(existing) { objects = imported }
-            var replacement = ""
+            var replacement = "", added: String?
             var reference: PDFNativeValue?, adjustment: CGAffineTransform?
             if path.count > 1 {
                 guard let form = forms[index], let stream = form.stream,
@@ -319,7 +321,7 @@ public enum PDFNativeImageEditor {
             if let reference {
                 var name = "AnnotateEditedImage\(index)"
                 while objects[name] != nil { name += "x" }
-                objects[name] = reference
+                objects[name] = reference; added = name
                 replacement = "/\(name) Do"
                 if let matrix = adjustment {
                     replacement = "q " + [matrix.a, matrix.b, matrix.c, matrix.d, matrix.tx, matrix.ty].map(nativePDFNumber).joined(separator: " ") + " cm " + replacement + " Q"
@@ -327,11 +329,14 @@ public enum PDFNativeImageEditor {
             }
             // A Form without its own Resources can still resolve names from this
             // dictionary. Keep a name used by such an unchanged descendant.
-            let inheritedUse = forms.contains { other, form in
-                guard other != index, let stream = form.stream, let dictionary = CGPDFStreamGetDictionary(stream), nativeDictionary(dictionary, "Resources") == nil else { return false }
-                return form.usesInheritedName(oldName)
+            // Other names for the same object go too, unless something still draws them.
+            PDFNativeTextProgram.prune(oldName, from: &objects, keeping: added) { alias in
+                let inheritedUse = forms.contains { other, form in
+                    guard other != index, let stream = form.stream, let dictionary = CGPDFStreamGetDictionary(stream), nativeDictionary(dictionary, "Resources") == nil else { return false }
+                    return form.usesInheritedName(alias)
+                }
+                return inheritedUse || operations.enumerated().contains { other, operation in other != index && operation.name == "Do" && operation.operands.first?.name == alias }
             }
-            if !inheritedUse, !operations.enumerated().contains(where: { other, operation in other != index && operation.name == "Do" && operation.operands.first?.name == oldName }) { objects.removeValue(forKey: oldName) }
             values["XObject"] = .dictionary(objects)
             let operation = operations[index], bytes = Array(data)
             var result = Data(bytes[..<operation.range.lowerBound]); result.append(Data(replacement.utf8)); result.append(contentsOf: bytes[operation.range.upperBound...])

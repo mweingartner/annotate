@@ -45,6 +45,34 @@ final class PDFNativeGlyphPlacement {
 }
 
 final class PDFNativeTextProgram {
+    /// The work reading one page may do, shared by the page and every form it draws, so
+    /// a crafted page can't make an edit run for minutes: forms drawn many times, deep
+    /// nesting, many operators, large streams, or one font selected over and over.
+    final class Work {
+        static let maximumForms = 2_000, maximumOperations = 250_000, maximumBytes = 128 * 1_024 * 1_024
+        static let maximumFonts = 1_000
+        private(set) var forms = 0, operations = 0, bytes = 0
+        private var fonts: [UInt: PDFNativeFont] = [:]
+        init() {}
+        func read(_ data: Data, operations count: Int, form: Bool) throws {
+            if form { forms += 1 }
+            operations += count
+            guard forms <= Self.maximumForms, operations <= Self.maximumOperations, data.count <= Self.maximumBytes - bytes else {
+                throw PDFNativeTextError.unsupported("The page's content exceeds the safe editing limit.")
+            }
+            bytes += data.count
+        }
+        /// Each font dictionary is read once per page, however often it is selected.
+        func font(_ dictionary: CGPDFDictionaryRef) throws -> PDFNativeFont {
+            let key = UInt(bitPattern: dictionary.rawValue)
+            if let font = fonts[key] { return font }
+            guard fonts.count < Self.maximumFonts else { throw PDFNativeTextError.unsupported("The page uses more fonts than can be edited safely.") }
+            let font = try PDFNativeFont(dictionary)
+            fonts[key] = font
+            return font
+        }
+    }
+
     struct State {
         var ctm = CGAffineTransform.identity
         var matrix = CGAffineTransform.identity
@@ -66,6 +94,26 @@ final class PDFNativeTextProgram {
         }
     }
     enum Piece { case glyph(PDFNativeGlyphPlacement), adjustment(Double) }
+
+    /// Drops the replaced object's name, and every other name in this page's own resources
+    /// for the same object, unless unchanged drawing still uses it: an alias would keep the
+    /// pre-edit text or pixels in the saved file.
+    static func prune(_ oldName: String, from objects: inout [String: PDFNativeValue], keeping added: String? = nil, stillDrawn: (String) -> Bool) {
+        guard let original = objects[oldName] else { return }
+        let aliases: [String]
+        if case .reference(let id) = original {
+            aliases = objects.compactMap { name, value in if case .reference(id) = value { name } else { nil } }
+        } else { aliases = [oldName] }
+        for alias in aliases where alias != added && !stillDrawn(alias) { objects.removeValue(forKey: alias) }
+    }
+
+    /// Whether a form drawn here, at any depth, draws `name`: such a form may be using
+    /// this content's resources, so an alias it draws must stay.
+    func formsDraw(_ name: String) -> Bool {
+        forms.values.contains { form in
+            form.operations.contains { $0.name == "Do" && $0.operands.first?.name == name } || form.formsDraw(name)
+        }
+    }
     let data: Data
     let operations: [PDFNativeOperation]
     let resources: CGPDFDictionaryRef?
@@ -83,11 +131,12 @@ final class PDFNativeTextProgram {
     var endState: State
 
     init(data: Data, resources: CGPDFDictionaryRef?, state initial: State = State(), sourceStream: CGPDFStreamRef? = nil,
-         ancestors: Set<UInt> = [], depth: Int = 0) throws {
+         ancestors: Set<UInt> = [], depth: Int = 0, work: Work = Work()) throws {
         guard depth < 24 else { throw PDFNativeTextError.unsupported("The page's nested form depth exceeds the editing limit.") }
         self.data = data; self.resources = resources; self.sourceStream = sourceStream
         var lexer = PDFNativeLexer(data)
         operations = try lexer.operations()
+        try work.read(data, operations: operations.count, form: depth > 0)
         var state = initial, stack: [State] = [], activeTextShows: [Int]? = nil
         for (index, operation) in operations.enumerated() {
             let args = operation.operands
@@ -117,7 +166,7 @@ final class PDFNativeTextProgram {
                 activeTextShows = nil
             case "Tf":
                 guard let name = args.first?.name, let resources, let fonts = nativeDictionary(resources, "Font"), let font = nativeDictionary(fonts, name) else { throw PDFNativeTextError.unsupported("The PDF references a missing font resource.") }
-                state.font = try PDFNativeFont(font); state.fontSize = try number(1)
+                state.font = try work.font(font); state.fontSize = try number(1)
                 if let loaded = state.font { fontFlags[loaded.baseName] = loaded.flags }
             case "Tc": state.characterSpace = try number(0)
             case "Tw": state.wordSpace = try number(0)
@@ -182,7 +231,7 @@ final class PDFNativeTextProgram {
                     if values.count == 6 { nestedState.ctm = CGAffineTransform(a: values[0], b: values[1], c: values[2], d: values[3], tx: values[4], ty: values[5]).concatenating(state.ctm) }
                 }
                 let nested = try PDFNativeTextProgram(data: nativeDecodedStream(stream), resources: nativeDictionary(dictionary, "Resources") ?? resources,
-                    state: nestedState, sourceStream: stream, ancestors: ancestors.union([identity]), depth: depth + 1)
+                    state: nestedState, sourceStream: stream, ancestors: ancestors.union([identity]), depth: depth + 1, work: work)
                 if let box = nativeArray(dictionary, "BBox"), CGPDFArrayGetCount(box) == 4 {
                     let values = (0..<4).compactMap { nativeArrayNumber(box, $0) }
                     if values.count == 4, values.allSatisfy(\.isFinite) {
@@ -203,7 +252,7 @@ final class PDFNativeTextProgram {
                 if let name = args.first?.name, let resources, let states = nativeDictionary(resources, "ExtGState"), let dictionary = nativeDictionary(states, name), let alpha = nativeNumber(dictionary, "ca") { state.fillAlpha = min(1, max(0, alpha)) }
                 if let name = args.first?.name, let resources, let states = nativeDictionary(resources, "ExtGState"), let dictionary = nativeDictionary(states, name), let fontArray = nativeArray(dictionary, "Font") {
                     var dictionary: CGPDFDictionaryRef?
-                    if CGPDFArrayGetDictionary(fontArray, 0, &dictionary), let dictionary { state.font = try PDFNativeFont(dictionary) }
+                    if CGPDFArrayGetDictionary(fontArray, 0, &dictionary), let dictionary { state.font = try work.font(dictionary) }
                     if let size = nativeArrayNumber(fontArray, 1) { state.fontSize = size }
                 }
             default: break
@@ -272,9 +321,11 @@ final class PDFNativeTextProgram {
             var name = "AnnotateEditedScan\(index)"
             while objects[name] != nil { name += "x" }
             objects[name] = reference
-            if let oldName = operations[index].operands.first?.name,
-               !operations.enumerated().contains(where: { other, operation in operation.name == "Do" && operation.operands.first?.name == oldName && images[other]?.replacement == nil }) {
-                objects.removeValue(forKey: oldName)
+            if let oldName = operations[index].operands.first?.name {
+                Self.prune(oldName, from: &objects, keeping: name) { alias in
+                    operations.enumerated().contains { other, operation in operation.name == "Do" && operation.operands.first?.name == alias && images[other]?.replacement == nil }
+                        || (alias != oldName && formsDraw(alias))
+                }
             }
             resourceValues["XObject"] = .dictionary(objects); replacements[index] = "/\(name) Do"
         }
@@ -307,10 +358,13 @@ final class PDFNativeTextProgram {
             var name = "AnnotateEditedForm\(index)"
             while objects[name] != nil { name += "x" }
             objects[name] = reference
-            if let oldName = operations[index].operands.first?.name,
-               !operations.enumerated().contains(where: { otherIndex, operation in
-                   operation.name == "Do" && operation.operands.first?.name == oldName && !(forms[otherIndex]?.hasChanges ?? false)
-               }) { objects.removeValue(forKey: oldName) }
+            if let oldName = operations[index].operands.first?.name {
+                Self.prune(oldName, from: &objects, keeping: name) { alias in
+                    operations.enumerated().contains { otherIndex, operation in
+                        operation.name == "Do" && operation.operands.first?.name == alias && !(forms[otherIndex]?.hasChanges ?? false)
+                    } || (alias != oldName && formsDraw(alias))
+                }
+            }
             resourceValues["XObject"] = .dictionary(objects)
             replacements[index] = "/\(name) Do"
         }

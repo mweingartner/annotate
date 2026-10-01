@@ -84,6 +84,7 @@ enum PDFNativeScanPatch {
         var isMask: CGPDFBoolean = 0
         if CGPDFDictionaryGetBoolean(dictionary, "ImageMask", &isMask), isMask != 0 { throw PDFNativeTextError.unsupported("Image masks cannot be edited as paper scans.") }
         let colorSpace = try space(dictionary)
+        guard nativeStreamExpansionIsBounded(stream) else { throw PDFNativeTextError.unsupported("The scan image is compressed more than once, which can't be decoded safely.") }
         var format = CGPDFDataFormat.raw
         guard let bytes = CGPDFStreamCopyData(stream, &format) else { throw PDFNativeTextError.cannotWrite }
         if format == .jpegEncoded || format == .JPEG2000 {

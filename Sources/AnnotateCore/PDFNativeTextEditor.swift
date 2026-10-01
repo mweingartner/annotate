@@ -126,6 +126,8 @@ public enum PDFNativeTextEditor {
         }
         pageValues["Contents"] = .array(contents)
         pageValues["Resources"] = .dictionary(pageResources)
+        // A stored thumbnail would still show the page as it was before the edit.
+        pageValues.removeValue(forKey: "Thumb")
         graph[pageID] = .dictionary(pageValues)
         let output = try graph.write()
         guard let result = PDFDocument(data: output), result.pageCount == document.pageCount,

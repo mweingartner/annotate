@@ -106,11 +106,15 @@ public enum PDFContentEditor {
         document.removePage(at: region.pageIndex)
         document.insert(replacement, at: region.pageIndex)
         for index in markers.indices {
+            let before = markers[index].regions.count
             markers[index].regions = markers[index].regions.compactMap { old in
                 guard old.pageIndex == region.pageIndex else { return old }
                 guard !old.bounds.intersects(region.bounds) else { return nil }
                 return PageRegion(pageIndex: old.pageIndex, bounds: old.bounds.applying(transform))
             }
+            // A marker that touched the erased area no longer quotes it: the quote would
+            // keep the erased words in the file's marker metadata and comment.
+            if markers[index].regions.count < before { markers[index].quote = "" }
             if !markers[index].regions.isEmpty { try MarkerCodec.apply(markers[index], to: document) }
         }
         return PageRegion(pageIndex: region.pageIndex, bounds: region.bounds.applying(transform))

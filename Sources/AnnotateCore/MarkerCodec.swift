@@ -9,6 +9,10 @@ public enum MarkerCodec {
     public static let ownerKey = PDFAnnotationKey(rawValue: "/AnnotateOwner")
     public static let ownerValue = "org.annotate.marker.v1"
     public static let maximumMetadataBytes = 1_048_576
+    /// What reading one document's markers may cost: a crafted file can repeat one large
+    /// payload on many annotations, or carry tens of thousands of small markers.
+    public static let maximumMarkers = 10_000
+    public static let maximumDecodedMetadataBytes = 16 * 1_048_576
 
     /// Creates the highlight, icon and comment annotations a marker is made of. An app
     /// may return a PDFAnnotation subclass to change how its own viewer draws markers;
@@ -24,22 +28,27 @@ public enum MarkerCodec {
 
     public static func markers(in document: PDFDocument) -> [PDFMarker] {
         guard !document.isLocked else { return [] }
-        var found: [UUID: PDFMarker] = [:]
-        for index in 0..<document.pageCount {
+        var found: [UUID: PDFMarker] = [:], decoded = 0
+        reading: for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
             for annotation in page.annotations {
+                // Cheap checks first: ownership and identity, then the payload's size.
                 guard annotation.value(forAnnotationKey: ownerKey) as? String == ownerValue,
-                      let raw = annotation.value(forAnnotationKey: metadataKey) as? String,
-                      raw.utf8.count <= maximumMetadataBytes,
-                      let data = raw.data(using: .utf8),
-                      let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+                      let identifier = (annotation.value(forAnnotationKey: identifierKey) as? String).flatMap(UUID.init(uuidString:)),
+                      // A damaged PDF can repeat an anchor. Keep the first valid one deterministically.
+                      found[identifier] == nil,
+                      let raw = annotation.value(forAnnotationKey: metadataKey) as? String else { continue }
+                let size = raw.utf8.count
+                guard size <= maximumMetadataBytes else { continue }
+                decoded += size
+                guard decoded <= maximumDecodedMetadataBytes else { break reading }
+                guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(raw.utf8)),
                       envelope.version == 1,
-                      let identifier = annotation.value(forAnnotationKey: identifierKey) as? String,
-                      UUID(uuidString: identifier) == envelope.marker.id,
+                      identifier == envelope.marker.id,
                       envelope.marker.pageIndex == index,
                       (try? validate(envelope.marker, in: document)) != nil else { continue }
-                // A damaged PDF can repeat an anchor. Keep the first valid one deterministically.
-                if found[envelope.marker.id] == nil { found[envelope.marker.id] = envelope.marker }
+                found[identifier] = envelope.marker
+                if found.count >= maximumMarkers { break reading }
             }
         }
         return ordered(Array(found.values), in: document)
@@ -136,10 +145,26 @@ public enum MarkerCodec {
     /// Normal document saving persists the updated appearance; restricted PDFs are left intact.
     public static func refreshAppearance(in document: PDFDocument) {
         guard !document.isLocked, document.allowsCommenting else { return }
+        // Each page's owned annotations, by marker, read once: scanning a whole page for
+        // every marker is quadratic on a page with many markers.
+        var owned: [Int: [UUID: [PDFAnnotation]]] = [:]
+        func annotations(of id: UUID, on pageIndex: Int) -> [PDFAnnotation] {
+            if owned[pageIndex] == nil, let page = document.page(at: pageIndex) {
+                var byMarker: [UUID: [PDFAnnotation]] = [:]
+                for annotation in page.annotations where annotation.value(forAnnotationKey: ownerKey) as? String == ownerValue {
+                    if let id = (annotation.value(forAnnotationKey: identifierKey) as? String).flatMap(UUID.init(uuidString:)) {
+                        byMarker[id, default: []].append(annotation)
+                    }
+                }
+                owned[pageIndex] = byMarker
+            }
+            return owned[pageIndex]?[id] ?? []
+        }
         for marker in markers(in: document) {
             guard let page = document.page(at: marker.pageIndex) else { continue }
-            let comments = page.annotations.filter { $0.type == "Text" && owns($0, id: marker.id) }
-            let popups = page.annotations.filter { $0.type == "Popup" && owns($0, id: marker.id) }
+            let mine = annotations(of: marker.id, on: marker.pageIndex)
+            let comments = mine.filter { $0.type == "Text" }
+            let popups = mine.filter { $0.type == "Popup" }
             // Prepare the replacement comment before removing legacy highlight contents.
             guard let prepared = try? commentTag(for: marker, on: page) else { continue }
             let popup = popups.first ?? prepared.popup
@@ -154,13 +179,12 @@ public enum MarkerCodec {
                 }
             }
             if popups.isEmpty { page.addAnnotation(popup) }
-            for badge in page.annotations where badge.type == "FreeText" && owns(badge, id: marker.id) {
+            for badge in mine where badge.type == "FreeText" {
                 badge.fontColor = marker.color.readableInkColor
                 badge.color = marker.color.nsColor
             }
             for pageIndex in Set(marker.regions.map(\.pageIndex)) {
-                guard let markedPage = document.page(at: pageIndex) else { continue }
-                for highlight in markedPage.annotations where highlight.type == "Highlight" && owns(highlight, id: marker.id) {
+                for highlight in annotations(of: marker.id, on: pageIndex) where highlight.type == "Highlight" {
                     highlight.contents = nil
                 }
             }

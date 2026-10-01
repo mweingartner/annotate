@@ -8,7 +8,28 @@ func nativeStream(_ dictionary: CGPDFDictionaryRef, _ key: String) -> CGPDFStrea
 func nativeName(_ dictionary: CGPDFDictionaryRef, _ key: String) -> String? { var value: UnsafePointer<CChar>?; guard CGPDFDictionaryGetName(dictionary, key, &value), let value else { return nil }; return String(cString: value) }
 func nativeNumber(_ dictionary: CGPDFDictionaryRef, _ key: String) -> Double? { var value: CGPDFReal = 0; guard CGPDFDictionaryGetNumber(dictionary, key, &value) else { return nil }; return Double(value) }
 func nativeArrayNumber(_ array: CGPDFArrayRef, _ index: Int) -> Double? { var value: CGPDFReal = 0; guard CGPDFArrayGetNumber(array, index, &value) else { return nil }; return Double(value) }
+/// Whether decoding `stream` expands it by a bounded factor. Core Graphics decodes a
+/// stream completely before its size can be checked, and chained compression filters
+/// multiply: two Flate passes can turn kilobytes into gigabytes. One compression filter
+/// (about 1000:1 at most) is accepted; a chain of them is not.
+func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
+    guard let dictionary = CGPDFStreamGetDictionary(stream) else { return false }
+    let compressing: Set<String> = ["FlateDecode", "Fl", "LZWDecode", "LZW", "RunLengthDecode", "RL"]
+    var filters: [String] = []
+    if let name = nativeName(dictionary, "Filter") { filters = [name] }
+    else if let array = nativeArray(dictionary, "Filter") {
+        guard CGPDFArrayGetCount(array) <= 8 else { return false }
+        for index in 0..<CGPDFArrayGetCount(array) {
+            var name: UnsafePointer<CChar>?
+            guard CGPDFArrayGetName(array, index, &name), let name else { return false }
+            filters.append(String(cString: name))
+        }
+    }
+    return filters.filter(compressing.contains).count <= 1
+}
+
 func nativeDecodedStream(_ stream: CGPDFStreamRef) throws -> Data {
+    guard nativeStreamExpansionIsBounded(stream) else { throw PDFNativeTextError.unsupported("A PDF stream is compressed more than once, which can't be decoded safely.") }
     var format = CGPDFDataFormat.raw
     guard let data = CGPDFStreamCopyData(stream, &format), format == .raw else { throw PDFNativeTextError.unsupported("The PDF text stream cannot be decoded by Core Graphics.") }
     guard CFDataGetLength(data) <= 64 * 1024 * 1024 else { throw PDFNativeTextError.unsupported("A PDF text stream exceeds the safe editing limit.") }
@@ -54,16 +75,24 @@ struct PDFNativeFont {
             metrics = descendant
             defaultWidth = nativeNumber(metrics, "DW") ?? 1000
             if let values = nativeArray(metrics, "W") {
+                // Ranges may overlap; bound the total work, not just each range.
+                var assigned = 0
+                func assign(_ count: Int) throws {
+                    assigned += count
+                    guard assigned <= 4 * 65_536 else { throw PDFNativeTextError.unsupported("The font's width table exceeds the safe editing limit.") }
+                }
                 var i = 0
                 while i < CGPDFArrayGetCount(values) {
                     guard let start = nativeArrayNumber(values, i), start >= 0, start <= 65535 else { throw PDFNativeTextError.malformed("Invalid CID font widths.") }
                     i += 1
                     var array: CGPDFArrayRef?
                     if CGPDFArrayGetArray(values, i, &array), let array {
+                        try assign(CGPDFArrayGetCount(array))
                         for offset in 0..<CGPDFArrayGetCount(array) { if let width = nativeArrayNumber(array, offset) { widths[Int(start) + offset] = width } }
                         i += 1
                     } else {
                         guard let end = nativeArrayNumber(values, i), let width = nativeArrayNumber(values, i + 1), end >= start, end <= 65535, end - start <= 65536 else { throw PDFNativeTextError.malformed("Invalid CID width range.") }
+                        try assign(Int(end - start) + 1)
                         for code in Int(start)...Int(end) { widths[code] = width }; i += 2
                     }
                 }
@@ -128,9 +157,10 @@ struct PDFNativeFont {
         descent = descriptor.flatMap { nativeNumber($0, "Descent") } ?? -200
         if let map = nativeStream(dictionary, "ToUnicode") {
             let parsed = try Self.cmap(try nativeDecodedStream(map))
+            // The font's encoding decides how strings split into character codes, as it does
+            // for the renderer: one byte for simple fonts, the encoding CMap's lengths for
+            // composite ones. The ToUnicode map only names the codes.
             unicode = parsed.unicode
-            if !parsed.lengths.isEmpty { codeLengths = parsed.lengths }
-            if !unicode.isEmpty { codeLengths = Array(Set(unicode.keys.map(\.count))).sorted(by: >) }
         }
     }
 

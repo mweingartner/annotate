@@ -169,7 +169,7 @@ final class PDFNativeObjectGraph {
         guard case .reference(let id) = try append(.null) else { throw PDFNativeGraphError.malformed }
         streams[key] = id
         var dictionary = try importEntries(original)
-        guard dictionary["F"] == nil else { throw PDFNativeGraphError.unsupportedStream }
+        guard dictionary["F"] == nil, nativeStreamExpansionIsBounded(stream) else { throw PDFNativeGraphError.unsupportedStream }
         var format = CGPDFDataFormat.raw
         guard let copied = CGPDFStreamCopyData(stream, &format) else { throw PDFNativeGraphError.unsupportedStream }
         let bytes = copied as Data

@@ -97,9 +97,25 @@ struct PDFNativeLexer {
         let start = index - 1
         while index < bytes.count, !Self.delimiter(bytes[index]) { index += 1 }
         let word = String(decoding: bytes[start..<index], as: UTF8.self)
-        if let number = Double(word), number.isFinite { return .number(number) }
+        if let number = Self.number(bytes[start..<index]) { return .number(number) }
         return .word(word)
     }
+    /// A PDF number: an optional sign, digits, and at most one decimal point. Swift would
+    /// also read hex, exponents, "inf" and "nan", which renderers treat as operators.
+    static func number(_ word: ArraySlice<UInt8>) -> Double? {
+        var digits = 0, points = 0
+        for (offset, byte) in word.enumerated() {
+            switch byte {
+            case 48...57: digits += 1
+            case 46: points += 1
+            case 43, 45 where offset == 0: break
+            default: return nil
+            }
+        }
+        guard digits > 0, points <= 1, let value = Double(String(decoding: word, as: UTF8.self)), value.isFinite else { return nil }
+        return value
+    }
+
     mutating func operations() throws -> [PDFNativeOperation] {
         var result: [PDFNativeOperation] = [], operands: [PDFNativeToken] = []
         var start = 0
