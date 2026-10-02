@@ -1,15 +1,10 @@
+import zlib
 import Foundation
 
 /// Small ZIP writer for Open Packaging Convention documents. Entries are stored without compression;
 /// PDF page images are already encoded. No shell process, temporary file, or third-party library is used.
 enum PDFOfficeZIP {
     static let maximumBytes = 512 * 1_024 * 1_024
-    private static let crcTable: [UInt32] = (0..<256).map { value in
-        var crc = UInt32(value)
-        for _ in 0..<8 { crc = crc & 1 == 1 ? 0xEDB88320 ^ (crc >> 1) : crc >> 1 }
-        return crc
-    }
-
     static func archive(_ entries: [(String, Data)]) throws -> Data {
         guard entries.count <= 65_535, Set(entries.map(\.0)).count == entries.count else { throw PDFConversionError.failed }
         var output = Data(), directory = Data()
@@ -42,10 +37,19 @@ enum PDFOfficeZIP {
         return output
     }
 
+    /// The ZIP checksum, by zlib: a byte-at-a-time table loop took a fifth of a second for a
+    /// large presentation.
     static func crc32(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFFFFFF
-        for byte in data { crc = crcTable[Int((crc ^ UInt32(byte)) & 0xFF)] ^ (crc >> 8) }
-        return crc ^ 0xFFFFFFFF
+        data.withUnsafeBytes { buffer -> UInt32 in
+            guard let base = buffer.bindMemory(to: Bytef.self).baseAddress else { return 0 }
+            var crc = zlib.crc32(0, nil, 0), offset = 0
+            while offset < buffer.count {
+                let length = min(buffer.count - offset, Int(UInt32.max))
+                crc = zlib.crc32(crc, base + offset, uInt(length))
+                offset += length
+            }
+            return UInt32(crc)
+        }
     }
 }
 

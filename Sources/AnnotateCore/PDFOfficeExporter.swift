@@ -74,7 +74,8 @@ public enum PDFOfficeExporter {
             let ratio = min(Double(slideWidth) / size.width, Double(slideHeight) / size.height)
             let width = Int(size.width * ratio), height = Int(size.height * ratio)
             let x = (slideWidth - width) / 2, y = (slideHeight - height) / 2
-            let image = try PDFConversion.imageData(page: page, format: .png, scale: 2)
+            // Each page's render is released before the next; together they peaked near 1 GB.
+            let image = try autoreleasepool { try PDFConversion.imageData(page: page, format: .png, scale: 2) }
             imageBytes += image.count
             guard imageBytes <= PDFOfficeZIP.maximumBytes - 8 * 1_024 * 1_024 else { throw PDFConversionError.inputTooLarge }
             entries.append(("ppt/media/page\(number).png", image))
