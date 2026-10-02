@@ -51,9 +51,9 @@ PRIVATE BY DESIGN
 
 pdf,annotate,markup,highlight,notes,edit pdf,forms,sign,ocr,convert,reader,study,research,redact
 
-## What's new (2.0.1)
+## What's new (2.0.2)
 
-The first App Store release: in-place text editing that matches the original layout, minimal reflow, glass markers, and a hardened, sandboxed design.
+Faster and roomier: typing in long or scanned documents is up to thirty times quicker, search, page operations and markers stay quick in large files, and documents up to twice as large can be edited, converted and signed. Escape, Undo and the close button now always get you out of an edit that couldn't be applied.
 
 ## Review notes
 
