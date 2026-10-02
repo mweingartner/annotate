@@ -33,13 +33,13 @@ public enum PDFNativeImageError: LocalizedError, Equatable {
 @MainActor
 public enum PDFNativeImageEditor {
     public static func images(in document: PDFDocument, pageIndex: Int) throws -> [PDFNativeImage] {
-        let context = try Context(document, pageIndex: pageIndex)
-        return try context.program.allImages.map { try descriptor($0, pageIndex: pageIndex, graph: context.graph, budget: context.hashBudget) }
+        let context = try Context(document, pageIndex: pageIndex, readingOnly: true)
+        return try context.program.allImages.map { try descriptor($0, pageIndex: pageIndex, context: context) }
     }
 
     /// A preview of the image's page area, including any artwork overlapping it.
     public static func preview(in document: PDFDocument, image: PDFNativeImage, maximumDimension: Double = 320) throws -> CGImage {
-        let context = try Context(document, pageIndex: image.pageIndex)
+        let context = try Context(document, pageIndex: image.pageIndex, readingOnly: true)
         _ = try checkedNode(image, context: context)
         let bounds = image.bounds
         guard maximumDimension.isFinite, (16...2048).contains(maximumDimension), bounds.width > 0, bounds.height > 0 else { throw PDFNativeImageError.invalidImage }
@@ -89,19 +89,20 @@ public enum PDFNativeImageEditor {
         return try context.write(path: node.path, edit: .remove, original: document)
     }
 
-    private static func descriptor(_ node: ImageNode, pageIndex: Int, graph: PDFNativeObjectGraph, budget: HashBudget) throws -> PDFNativeImage {
+    private static func descriptor(_ node: ImageNode, pageIndex: Int, context: Context) throws -> PDFNativeImage {
         PDFNativeImage(id: "\(pageIndex):" + node.path.map(String.init).joined(separator: "."), pageIndex: pageIndex,
                        bounds: node.bounds, pixelSize: node.pixelSize, canTransform: node.transformReason == nil,
-                       unsupportedReason: node.transformReason, fingerprint: try fingerprint(node, graph: graph, budget: budget))
+                       unsupportedReason: node.transformReason, fingerprint: try fingerprint(node, context: context))
     }
 
     private static func checkedNode(_ image: PDFNativeImage, context: Context) throws -> ImageNode {
         guard let node = context.program.allImages.first(where: { "\(image.pageIndex):" + $0.path.map(String.init).joined(separator: ".") == image.id }),
-              try fingerprint(node, graph: context.graph, budget: context.hashBudget) == image.fingerprint else { throw PDFNativeImageError.staleSelection }
+              try fingerprint(node, context: context) == image.fingerprint else { throw PDFNativeImageError.staleSelection }
         return node
     }
 
-    private static func fingerprint(_ node: ImageNode, graph: PDFNativeObjectGraph, budget: HashBudget) throws -> Data {
+    private static func fingerprint(_ node: ImageNode, context: Context) throws -> Data {
+        let graph = context.graph, budget = context.hashBudget
         var hash = SHA256()
         try budget.consume(bytes: node.content.count)
         hash.update(data: node.content)
@@ -124,7 +125,19 @@ public enum PDFNativeImageEditor {
             case .stream(let dictionary, let data): try append(.dictionary(dictionary), depth: depth + 1); try tag("stream\(data.count):"); try budget.consume(bytes: data.count); hash.update(data: data)
             case .reference(let id):
                 if let known = references[id] { try tag("ref\(known);") }
-                else { references[id] = references.count; try tag("object\(references[id]!){"); try append(graph.resolved(value), depth: depth + 1); try tag("}") }
+                else {
+                    references[id] = references.count
+                    let target = try graph.resolved(value)
+                    // A node of the page tree is identified, not hashed: listing reads other
+                    // pages as placeholders while editing reads them whole, and an image that
+                    // reaches the page tree must fingerprint the same either way. Only real
+                    // nodes count; a dictionary merely typed /Page is hashed in full.
+                    if context.pageTree.contains(id) {
+                        try tag("object\(references[id]!){page tree}")
+                    } else {
+                        try tag("object\(references[id]!){"); try append(target, depth: depth + 1); try tag("}")
+                    }
+                }
             }
         }
         try append(graph.importStream(node.stream))
@@ -193,14 +206,28 @@ public enum PDFNativeImageEditor {
         let program: ImageProgram
         let pageID: Int
         let hashBudget = HashBudget()
-        init(_ document: PDFDocument, pageIndex: Int) throws {
+        /// The object numbers of every page and page-tree node.
+        let pageTree: Set<Int>
+        /// `readingOnly`: listing and previewing read one page, so the other pages are
+        /// placeholders (see `PDFNativeObjectGraph`); writing needs every page.
+        init(_ document: PDFDocument, pageIndex: Int, readingOnly: Bool = false) throws {
             guard !document.isLocked, document.allowsCopying, document.allowsDocumentChanges else { throw PDFNativeImageError.permission }
             guard !document.isEncrypted else { throw PDFNativeImageError.unsupported("Native image editing cannot preserve this PDF's encryption. Use an explicitly unencrypted working copy.") }
             guard pageIndex >= 0, pageIndex < document.pageCount, let data = document.dataRepresentation(), let provider = CGDataProvider(data: data as CFData),
                   let source = CGPDFDocument(provider), let page = source.page(at: pageIndex + 1), let dictionary = page.dictionary else { throw PDFNativeImageError.invalidImage }
-            let graph = try PDFNativeObjectGraph(document: source)
+            let graph = try PDFNativeObjectGraph(document: source, keepingContentOf: readingOnly ? pageIndex + 1 : nil)
             guard let pageID = graph.objectID(for: dictionary) else { throw PDFNativeImageError.cannotWrite }
             self.pageIndex = pageIndex; self.page = page; self.graph = graph; self.pageID = pageID
+            var tree = Set<Int>()
+            for number in 1...max(1, source.numberOfPages) {
+                // Each page and its ancestors; a crafted /Parent loop ends at the first repeat.
+                var node = source.page(at: number)?.dictionary
+                while let current = node, let id = graph.objectID(for: current), tree.insert(id).inserted {
+                    var parent: CGPDFDictionaryRef?
+                    node = CGPDFDictionaryGetDictionary(current, "Parent", &parent) ? parent : nil
+                }
+            }
+            pageTree = tree
             program = try ImageProgram(data: content(dictionary), resources: PDFNativeTextEditor.inheritedResources(dictionary))
         }
         func write(path: [Int], edit: ImageEdit, original: PDFDocument) throws -> PDFDocument {

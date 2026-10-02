@@ -43,13 +43,29 @@ final class PDFNativeObjectGraph {
     private(set) var rootID = 0
     private var info: PDFNativeValue?
 
+    /// Pages imported as placeholders: everything but what they draw (see `init`).
+    private var placeholderPages: Set<UInt> = []
+
     private let maximumObjects = 200_000
     private let maximumBytes = 1_024 * 1_024 * 1_024
     private let maximumItems = 4_000_000
 
-    init(document: CGPDFDocument) throws {
+    /// `keepingContentOf`: when an editor needs only one page of its result, every other
+    /// page is imported as a placeholder, keeping its place, size and annotations (so
+    /// links and outline entries still lead to it) but not its content, resources or
+    /// thumbnail. A large scanned book then costs one page's images, not every page's.
+    init(document: CGPDFDocument, keepingContentOf pageNumber: Int? = nil) throws {
         guard !document.isEncrypted else { throw PDFNativeGraphError.encrypted }
         retainedDocuments = [document]
+        if let pageNumber {
+            guard document.numberOfPages <= maximumItems else { throw PDFNativeGraphError.resourceLimit }
+            for number in 1...max(1, document.numberOfPages) where number != pageNumber {
+                if let page = document.page(at: number)?.dictionary { placeholderPages.insert(UInt(bitPattern: page.rawValue)) }
+            }
+            // A crafted page tree can list the edited page's dictionary more than once; it
+            // is always imported whole.
+            if let kept = document.page(at: pageNumber)?.dictionary { placeholderPages.remove(UInt(bitPattern: kept.rawValue)) }
+        }
         guard let catalog = document.catalog else { throw PDFNativeGraphError.malformed }
         guard case .reference(let root) = try importDictionary(catalog) else { throw PDFNativeGraphError.malformed }
         rootID = root
@@ -138,7 +154,13 @@ final class PDFNativeObjectGraph {
         if let id = dictionaries[key] { return .reference(id) }
         guard case .reference(let id) = try append(.null) else { throw PDFNativeGraphError.malformed }
         dictionaries[key] = id
-        objects[id] = try .dictionary(importEntries(dictionary))
+        guard placeholderPages.contains(key) else {
+            objects[id] = try .dictionary(importEntries(dictionary))
+            return .reference(id)
+        }
+        var page = try importEntries(dictionary, omitting: ["Contents", "Resources", "Thumb"])
+        page["Resources"] = .dictionary([:])
+        objects[id] = .dictionary(page)
         return .reference(id)
     }
 
@@ -207,14 +229,16 @@ final class PDFNativeObjectGraph {
         }
     }
 
-    private func importEntries(_ dictionary: CGPDFDictionaryRef) throws -> [String: PDFNativeValue] {
+    private func importEntries(_ dictionary: CGPDFDictionaryRef, omitting omitted: Set<String> = []) throws -> [String: PDFNativeValue] {
         try enter()
         defer { depth -= 1 }
         guard CGPDFDictionaryGetCount(dictionary) <= maximumItems else { throw PDFNativeGraphError.resourceLimit }
         var entries: [String: PDFNativeValue] = [:]
         var failure: Error?
         CGPDFDictionaryApplyBlock(dictionary, { key, object, _ in
-            do { entries[Self.byteString(key)] = try self.importObject(object); return true }
+            let name = Self.byteString(key)
+            guard !omitted.contains(name) else { return true }
+            do { entries[name] = try self.importObject(object); return true }
             catch { failure = error; return false }
         }, nil)
         if let failure { throw failure }

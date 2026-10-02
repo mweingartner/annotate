@@ -20,35 +20,48 @@ public enum PDFNativeTextError: LocalizedError, Equatable {
     }
 }
 
+/// How much of the document an edit's result carries.
+public enum PDFNativeEditScope: Sendable {
+    /// Every page, ready to replace the document.
+    case wholeDocument
+    /// Only the edited page is real; the others are placeholders that keep their place, size
+    /// and annotations. For callers that take just the edited page from the result, which
+    /// then costs one page's content however large the rest of the document is.
+    case editedPage
+}
+
 /// Rewrites original text-showing operators and imports embedded, selectable CoreText content.
 /// It never covers original text with an annotation or rasterizes a source page.
 @MainActor
 public enum PDFNativeTextEditor {
     public static func replace(in document: PDFDocument, region: PageRegion, originalText: String,
-                               replacement: NSAttributedString, destination: PageRegion? = nil) throws -> PDFDocument {
+                               replacement: NSAttributedString, destination: PageRegion? = nil,
+                               scope: PDFNativeEditScope = .wholeDocument) throws -> PDFDocument {
         try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination,
-                           scanMode: false, reflow: nil).document
+                           scanMode: false, reflow: nil, scope: scope).document
     }
 
     /// Replaces text and moves the content below it by the edit's change in height (see
     /// `PDFNativeReflowRequest`), reporting what moved. Throws `PDFNativeReflowRefusal`
     /// when the content can't be moved safely; nothing is changed then.
     public static func replace(in document: PDFDocument, region: PageRegion, originalText: String, replacement: NSAttributedString,
-                               destination: PageRegion, reflow: PDFNativeReflowRequest?) throws -> (document: PDFDocument, moved: PDFNativeReflowResult?) {
+                               destination: PageRegion, reflow: PDFNativeReflowRequest?,
+                               scope: PDFNativeEditScope = .wholeDocument) throws -> (document: PDFDocument, moved: PDFNativeReflowResult?) {
         try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination,
-                           scanMode: false, reflow: reflow)
+                           scanMode: false, reflow: reflow, scope: scope)
     }
 
     /// Explicit scan mode edits only supported source image pixels and removes the matched OCR layer.
     public static func replaceScanned(in document: PDFDocument, region: PageRegion, originalText: String,
-                                      replacement: NSAttributedString, destination: PageRegion? = nil) throws -> PDFDocument {
+                                      replacement: NSAttributedString, destination: PageRegion? = nil,
+                                      scope: PDFNativeEditScope = .wholeDocument) throws -> PDFDocument {
         try replaceContent(in: document, region: region, originalText: originalText, replacement: replacement, destination: destination,
-                           scanMode: true, reflow: nil).document
+                           scanMode: true, reflow: nil, scope: scope).document
     }
 
     private static func replaceContent(in document: PDFDocument, region: PageRegion, originalText: String,
                                        replacement: NSAttributedString, destination: PageRegion?, scanMode: Bool,
-                                       reflow: PDFNativeReflowRequest?) throws -> (document: PDFDocument, moved: PDFNativeReflowResult?) {
+                                       reflow: PDFNativeReflowRequest?, scope: PDFNativeEditScope) throws -> (document: PDFDocument, moved: PDFNativeReflowResult?) {
         guard !document.isLocked, document.allowsDocumentChanges, document.allowsCopying else { throw PDFNativeTextError.permission }
         guard !document.isEncrypted else { throw PDFNativeTextError.unsupported("Native editing cannot preserve this document's encryption. Use an explicitly unencrypted working copy.") }
         guard let page = document.page(at: region.pageIndex), MarkerCodec.finite(region.bounds),
@@ -58,7 +71,7 @@ public enum PDFNativeTextEditor {
         let destination = destination ?? region
         guard destination.pageIndex == region.pageIndex, MarkerCodec.finite(destination.bounds), destination.bounds.width >= 1,
               destination.bounds.height >= 1, page.bounds(for: .cropBox).contains(destination.bounds) else { throw PDFNativeTextError.invalidSelection }
-        let graph = try PDFNativeObjectGraph(document: source)
+        let graph = try PDFNativeObjectGraph(document: source, keepingContentOf: scope == .editedPage ? region.pageIndex + 1 : nil)
         guard let pageDictionary = sourcePage.dictionary else { throw PDFNativeTextError.cannotWrite }
         guard let pageID = graph.objectID(for: pageDictionary), let value = graph[pageID],
               case .dictionary(var pageValues) = value else { throw PDFNativeTextError.cannotWrite }

@@ -170,13 +170,19 @@ extension ReaderModel {
         do {
             synchronizeNativeFields(into: source, from: document, reflowed: edit.lastReflow)
             let destination = PageRegion(pageIndex: edit.pageIndex, bounds: edit.appliedBounds)
+            // Decided once: a page swapped in place needs only that page from the editor, so
+            // the rest of a large document isn't rebuilt on every keystroke. The same answer
+            // chooses how the result is applied below; a page-only result never replaces the
+            // document.
+            let exchangesPage = document.canExchangePage(at: edit.pageIndex)
+            let scope: PDFNativeEditScope = exchangesPage ? .editedPage : .wholeDocument
             var result: PDFDocument
             var moved: PDFNativeReflowResult?
             // A reason from an earlier keystroke no longer applies unless reflow refuses again.
             edit.reflowRefusal = nil
             if edit.usesScannedTextEditing {
                 result = try PDFNativeTextEditor.replaceScanned(in: source, region: region,
-                    originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination)
+                    originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination, scope: scope)
             } else if let gap = edit.reflowGap, let fitted = edit.reflowedBounds(),
                       abs(fitted.height - edit.originalBounds.height) > 0.5 || abs(fitted.height - edit.appliedBounds.height) > 0.5 {
                 // Minimal reflow: the block hugs its text, and the content below moves by
@@ -185,7 +191,8 @@ extension ReaderModel {
                     let delta = fitted.height - edit.originalBounds.height
                     (result, moved) = try PDFNativeTextEditor.replace(in: source, region: region, originalText: edit.nativeOriginalText,
                         replacement: edit.attributedText, destination: PageRegion(pageIndex: edit.pageIndex, bounds: fitted),
-                        reflow: abs(delta) > 0.5 ? PDFNativeReflowRequest(delta: delta, block: edit.originalBounds, minimumGap: gap) : nil)
+                        reflow: abs(delta) > 0.5 ? PDFNativeReflowRequest(delta: delta, block: edit.originalBounds, minimumGap: gap) : nil,
+                        scope: scope)
                     if let moved { try moveAnnotations(in: result, pageIndex: edit.pageIndex, region: moved.region, offset: moved.offset) }
                     edit.settleBounds(fitted)
                     edit.reflowRefusal = nil
@@ -194,12 +201,14 @@ extension ReaderModel {
                     // with the overflow mark and this reason.
                     edit.reflowRefusal = refusal.message
                     result = try PDFNativeTextEditor.replace(in: source, region: region,
-                        originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination)
+                        originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination, scope: scope)
                 }
             } else {
                 result = try PDFNativeTextEditor.replace(in: source, region: region,
-                    originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination)
+                    originalText: edit.nativeOriginalText, replacement: edit.attributedText, destination: destination, scope: scope)
             }
+            let editedPage = result.page(at: edit.pageIndex)
+            guard editedPage != nil || !exchangesPage else { throw PDFNativeTextError.cannotWrite }
             if edit.needsUndoCheckpoint {
                 guard let previous = document.dataRepresentation() else { throw PDFNativeTextError.cannotWrite }
                 owner?.undoManager?.registerUndo(withTarget: self) { target in target.restoreLiveTextCheckpoint(previous) }
@@ -227,8 +236,8 @@ extension ReaderModel {
             // for a moment on every keystroke. Pages with form fields keep the whole-
             // document path, because their fields also live in the document's form.
             result.delegate = MarkerChrome.documentDelegate
-            if let page = result.page(at: edit.pageIndex), document.canExchangePage(at: edit.pageIndex) {
-                document.exchangePage(at: edit.pageIndex, with: page)
+            if exchangesPage, let editedPage {
+                document.exchangePage(at: edit.pageIndex, with: editedPage)
                 MarkerCodec.refreshAppearance(in: document)
                 markers = MarkerCodec.markers(in: document)
                 pdfView?.layoutDocumentView()
