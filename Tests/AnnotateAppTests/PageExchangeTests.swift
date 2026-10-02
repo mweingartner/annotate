@@ -405,4 +405,22 @@ struct PageExchangeTests {
         #expect(pdf.outlineItems(limit: 10) == nil)
         #expect(pdf.outlineItems(limit: 31)?.count == 31)
     }
+
+    /// outlineItems: by default at most 20,000 entries, the root included.
+    @Test("By default an outline of exactly 20,000 entries is walked; one entry more keeps the whole-document path")
+    func defaultOutlineBudget() throws {
+        let pdf = SamplePDF.make()
+        let root = PDFOutline()
+        for index in 0..<19_999 {
+            let item = PDFOutline(); item.label = "Entry \(index)"
+            root.insertChild(item, at: index)
+        }
+        pdf.outlineRoot = root
+        #expect(pdf.outlineItems()?.count == 20_000)
+        #expect(pdf.canExchangePage(at: 0))
+        let last = PDFOutline(); last.label = "One too many"
+        root.insertChild(last, at: root.numberOfChildren)
+        #expect(pdf.outlineItems() == nil)
+        #expect(!pdf.canExchangePage(at: 0))
+    }
 }

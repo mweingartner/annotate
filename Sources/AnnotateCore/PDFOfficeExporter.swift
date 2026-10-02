@@ -6,7 +6,7 @@ import PDFKit
 public enum PDFOfficeExporter {
     public static func spreadsheet(_ document: PDFDocument) throws -> Data {
         try PDFConversion.validate(document)
-        guard document.pageCount <= 10_000 else { throw PDFConversionError.inputTooLarge }
+        guard document.pageCount <= 20_000 else { throw PDFConversionError.inputTooLarge }
         var entries: [(String, Data)] = []
         var sheets = "", relations = "", overrides = ""
         var bytes = 0
@@ -17,7 +17,7 @@ public enum PDFOfficeExporter {
             guard let page = document.page(at: index) else { throw AnnotateError.invalidPage(index) }
             let text = try PDFPageText.attributedText(from: page).string
             containsText = containsText || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            guard text.utf8.count <= 64 * 1_024 * 1_024 else { throw PDFConversionError.inputTooLarge }
+            guard text.utf8.count <= 128 * 1_024 * 1_024 else { throw PDFConversionError.inputTooLarge }
             let lines = text.components(separatedBy: .newlines)
             guard lines.count <= 1_048_576 else { throw PDFConversionError.inputTooLarge }
             var rows = ""
@@ -59,7 +59,7 @@ public enum PDFOfficeExporter {
 
     public static func presentation(_ document: PDFDocument) throws -> Data {
         try PDFConversion.validate(document, needsPrinting: true)
-        guard document.pageCount <= 1_000, let first = document.page(at: 0) else { throw PDFConversionError.inputTooLarge }
+        guard document.pageCount <= 2_000, let first = document.page(at: 0) else { throw PDFConversionError.inputTooLarge }
         let firstSize = try PDFConversion.displayedSize(of: first)
         let longest = max(firstSize.width, firstSize.height)
         let slideWidth = max(914_400, Int(9_144_000 * firstSize.width / longest))

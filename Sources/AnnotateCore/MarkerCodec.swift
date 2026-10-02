@@ -8,11 +8,11 @@ public enum MarkerCodec {
     public static let identifierKey = PDFAnnotationKey(rawValue: "/AnnotateMarkerID")
     public static let ownerKey = PDFAnnotationKey(rawValue: "/AnnotateOwner")
     public static let ownerValue = "org.annotate.marker.v1"
-    public static let maximumMetadataBytes = 1_048_576
+    public static let maximumMetadataBytes = 2 * 1_048_576
     /// What reading one document's markers may cost: a crafted file can repeat one large
     /// payload on many annotations, or carry tens of thousands of small markers.
-    public static let maximumMarkers = 10_000
-    public static let maximumDecodedMetadataBytes = 16 * 1_048_576
+    public static let maximumMarkers = 20_000
+    public static let maximumDecodedMetadataBytes = 32 * 1_048_576
 
     /// Creates the highlight, icon and comment annotations a marker is made of. An app
     /// may return a PDFAnnotation subclass to change how its own viewer draws markers;
@@ -218,13 +218,13 @@ public enum MarkerCodec {
 
     static func validate(_ marker: PDFMarker, in document: PDFDocument) throws {
         guard !marker.categories.isEmpty else { throw AnnotateError.invalidMarker("choose at least one category.") }
-        guard !marker.regions.isEmpty, marker.regions.count <= 10_000 else {
+        guard !marker.regions.isEmpty, marker.regions.count <= 20_000 else {
             throw AnnotateError.invalidMarker("choose a location or a shorter selection.")
         }
         guard marker.icon.utf8.count <= 128,
-              marker.quote.utf8.count <= 524_288,
-              marker.note.utf8.count <= 524_288,
-              marker.question.utf8.count <= 524_288 else { throw AnnotateError.metadataTooLarge }
+              marker.quote.utf8.count <= 1_048_576,
+              marker.note.utf8.count <= 1_048_576,
+              marker.question.utf8.count <= 1_048_576 else { throw AnnotateError.metadataTooLarge }
         guard marker.createdAt.timeIntervalSinceReferenceDate.isFinite,
               [marker.color.red, marker.color.green, marker.color.blue].allSatisfy({ $0.isFinite && (0...1).contains($0) }) else {
             throw AnnotateError.invalidMarker("the color or date is invalid.")

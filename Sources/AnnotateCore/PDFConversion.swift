@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 public enum PDFConversion {
-    public static let maximumInputBytes = 512 * 1_024 * 1_024
+    public static let maximumInputBytes = 1_024 * 1_024 * 1_024
     public static let importExtensions = ["pdf", "txt", "rtf", "rtfd", "doc", "docx", "odt", "png", "jpg", "jpeg", "tif", "tiff", "heic", "heif", "bmp", "gif", "webp"]
 
     public static func validate(_ document: PDFDocument, needsPrinting: Bool = false, needsModification: Bool = false) throws {
@@ -88,8 +88,8 @@ public enum PDFConversion {
         let size = try displayedSize(of: page)
         guard scale.isFinite, scale >= 0.5, scale <= 4 else { throw PDFConversionError.invalidPage }
         let width = Int(ceil(size.width * scale)), height = Int(ceil(size.height * scale))
-        guard width > 0, height > 0, width <= 16_384, height <= 16_384,
-              width * height <= 32_000_000 else { throw PDFConversionError.invalidPage }
+        guard width > 0, height > 0, width <= 32_768, height <= 32_768,
+              width * height <= 64_000_000 else { throw PDFConversionError.invalidPage }
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw PDFConversionError.invalidImage }
@@ -154,15 +154,19 @@ public enum PDFConversion {
         let frameCount = CGImageSourceGetCount(source)
         // TIFF pages are individual document pages; animated image files import their first frame.
         let count = ["tif", "tiff"].contains(ext) ? frameCount : 1
-        guard count <= 10_000 else { throw PDFConversionError.inputTooLarge }
+        guard count <= 20_000 else { throw PDFConversionError.inputTooLarge }
         for index in 0..<count {
-            let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 8_192]
-            guard let image = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary),
-                  let page = PDFPage(image: NSImage(cgImage: image, size: CGSize(width: image.width, height: image.height))) else {
-                throw PDFConversionError.invalidImage
+            // Each decoded frame (up to 1 GiB) is released before the next is decoded; the
+            // page keeps only its compressed image.
+            try autoreleasepool {
+                let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 16_384]
+                guard let image = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary),
+                      let page = PDFPage(image: NSImage(cgImage: image, size: CGSize(width: image.width, height: image.height))) else {
+                    throw PDFConversionError.invalidImage
+                }
+                document.insert(page, at: document.pageCount)
             }
-            document.insert(page, at: document.pageCount)
         }
         return document
     }
@@ -194,7 +198,7 @@ public enum PDFConversion {
             layout.addTextContainer(container)
             layout.ensureLayout(for: container)
             let glyphs = layout.glyphRange(for: container)
-            guard glyphs.length > 0, NSMaxRange(glyphs) > laidOutGlyphs, pageCount < 10_000 else {
+            guard glyphs.length > 0, NSMaxRange(glyphs) > laidOutGlyphs, pageCount < 20_000 else {
                 context.closePDF()
                 throw PDFConversionError.failed
             }

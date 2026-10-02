@@ -14,7 +14,7 @@ Available outputs are PDF, DOCX, DOC, ODT, RTF, TXT, HTML, XLSX, PPTX, PNG, JPEG
 
 Word, RTF, and OpenDocument imports use AppKit's attributed-string readers, then `NSTextStorage`, `NSLayoutManager`, and sequential `NSTextContainer` objects to paginate onto 612 × 792 point pages with 48-point margins. Available attributed styling and supported attachments are drawn by AppKit. Original Office page breaks, floating objects, formulas, charts, macros, document-level pagination and exact Word layout are not reproduced. Imported output requires visual review. Arbitrary HTML import is deliberately not offered because external HTML resources require a separate resource-loading policy; HTML export remains available.
 
-Image rendering uses the page's displayed crop size, respecting quarter-turn rotation. A white background avoids transparent page backgrounds. Exports support 72, 144, or 216 pixels/inch and include visible annotations. Image memory is bounded to 32 million pixels and a 16,384-pixel edge per rendered page. Inputs larger than 512 MB are rejected; text pagination and TIFF imports are capped at 10,000 pages. Those are safety bounds, not a promised capacity benchmark.
+Image rendering uses the page's displayed crop size, respecting quarter-turn rotation. A white background avoids transparent page backgrounds. Exports support 72, 144, or 216 pixels/inch and include visible annotations. Image memory is bounded to 64 million pixels and a 32,768-pixel edge per rendered page. Inputs larger than 1 GB are rejected; text pagination and TIFF imports are capped at 20,000 pages. Those are safety bounds, not a promised capacity benchmark.
 
 ## Native Excel and PowerPoint exports
 
@@ -22,7 +22,7 @@ Image rendering uses the page's displayed crop size, respecting quarter-turn rot
 
 PPTX creates one slide per PDF page with a 144 ppi PNG image including visible annotations. A complete slide master, blank layout, theme, presentation properties, and package relationships are included. Slide dimensions follow the first page's aspect ratio, with later pages fitted and centered without distortion. Each page image can be moved or resized in a presentation editor; the text and images within the page are not separate slide objects. The source PDF's reading text remains in the PDF, but the PPTX page copy is an image.
 
-The Office package limit is 256 MB. XLSX additionally limits source text to 64 MB per page, one million worksheet rows, 16,384 columns, and the Excel 32,767 UTF-16-unit cell limit; values exceeding limits produce an error rather than truncation. PPTX is limited to 1,000 slides and retains the shared per-page rendering bounds. ZIP entries are stored without deflate compression; PNG images are already compressed.
+The Office package limit is 512 MB. XLSX additionally limits source text to 128 MB per page, one million worksheet rows, 16,384 columns, and the Excel 32,767 UTF-16-unit cell limit; values exceeding limits produce an error rather than truncation. PPTX is limited to 2,000 slides and retains the shared per-page rendering bounds. ZIP entries are stored without deflate compression; PNG images are already compressed.
 
 ## Compression
 

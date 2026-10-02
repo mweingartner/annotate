@@ -13,7 +13,7 @@ enum PDFCertificateX509 {
     }
 
     /// Large enough for any real certificate chain member; bounds work on hostile input.
-    private static let maximumCertificateBytes = 65_536
+    private static let maximumCertificateBytes = 131_072
     /// RFC 5280 extensions: key usage 2.5.29.15 and extended key usage 2.5.29.37.
     private static let keyUsageOID: [UInt8] = [0x55, 0x1D, 0x0F]
     private static let extendedKeyUsageOID: [UInt8] = [0x55, 0x1D, 0x25]

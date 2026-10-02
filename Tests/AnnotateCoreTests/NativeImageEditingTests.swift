@@ -183,6 +183,31 @@ struct NativeImageEditingTests {
         #expect(throws: PDFNativeImageError.self) { try PDFNativeImageEditor.images(in: rawPDF(expanding), pageIndex: 0) }
     }
 
+    /// PDFNativeImageEditor.replacementStream: 32,768 pixels a side, 80,000,000 in all.
+    @Test("A replacement image may be exactly 32,768 pixels wide; one more, or more than 80 million pixels, is refused")
+    func replacementSizeLimits() throws {
+        let source = try fixture()
+        let image = try #require(try PDFNativeImageEditor.images(in: source, pageIndex: 0).first)
+        let wide = try PDFNativeImageEditor.update(in: source, image: image, replacement: try bitmap(width: 32_768, height: 1))
+        #expect(try PDFNativeImageEditor.images(in: wide, pageIndex: 0).first?.pixelSize == CGSize(width: 32_768, height: 1))
+        #expect(throws: PDFNativeImageError.invalidImage) {
+            try PDFNativeImageEditor.update(in: source, image: image, replacement: try bitmap(width: 32_769, height: 1))
+        }
+        // 8,000 × 10,001: each side well within the limit, the area 8,000 pixels past it.
+        #expect(throws: PDFNativeImageError.invalidImage) {
+            try PDFNativeImageEditor.update(in: source, image: image, replacement: try bitmap(width: 8_000, height: 10_001))
+        }
+    }
+
+    /// A one-bit gray image, so even an oversized one is cheap to build.
+    private func bitmap(width: Int, height: Int) throws -> CGImage {
+        let rowBytes = (width + 7) / 8
+        let provider = try #require(CGDataProvider(data: Data(repeating: 0x55, count: rowBytes * height) as CFData))
+        return try #require(CGImage(width: width, height: height, bitsPerComponent: 1, bitsPerPixel: 1, bytesPerRow: rowBytes,
+            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+    }
+
     private func replacement(alpha: Double = 1) throws -> CGImage {
         let context = try #require(CGContext(data: nil, width: 20, height: 10, bitsPerComponent: 8, bytesPerRow: 80, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         context.setFillColor(CGColor(red: 0, green: 1, blue: 0, alpha: alpha)); context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))

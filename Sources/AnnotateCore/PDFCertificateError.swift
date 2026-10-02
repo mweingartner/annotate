@@ -16,7 +16,7 @@ public enum PDFCertificateError: Error, LocalizedError {
         case .malformedSignature: "The signature has an invalid byte range, contents value, or certificate envelope."
         case .unsupportedSignature: "This signature format is not supported. Annotate validates detached PKCS#7 signatures."
         case .signatureTooLarge: "The certificate chain exceeds the reserved signature space. No signed file was created."
-        case .tooLarge: "Certificate signing and validation support PDFs up to 256 MB."
+        case .tooLarge: "Certificate signing and validation support PDFs up to 512 MB."
         case .reasonTooLong: "The signing reason must be at most 2,000 UTF-8 bytes."
         case .invalidByteRange: "The signature byte ranges are malformed or outside the file."
         case .invalidContents: "The excluded byte range does not match the signature contents."

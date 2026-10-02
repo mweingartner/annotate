@@ -25,7 +25,7 @@ enum PDFNativeScanPatch {
         guard let dictionary = CGPDFStreamGetDictionary(image.stream) else { throw PDFNativeTextError.cannotWrite }
         let decoded = try decode(image.stream, dictionary: dictionary)
         let width = decoded.width, height = decoded.height
-        guard width <= 16_384, height <= 16_384, width * height <= 40_000_000 else { throw PDFNativeTextError.unsupported("The source scan exceeds the safe pixel-editing limit.") }
+        guard width <= 32_768, height <= 32_768, width * height <= 80_000_000 else { throw PDFNativeTextError.unsupported("The source scan exceeds the safe pixel-editing limit.") }
         let unit = region.applying(matrix.inverted())
         let pixel = CGRect(x: unit.minX * Double(width), y: (1 - unit.maxY) * Double(height), width: unit.width * Double(width), height: unit.height * Double(height)).integral.insetBy(dx: -1, dy: -1)
         guard pixel.minX >= 3, pixel.minY >= 3, pixel.maxX <= Double(width - 3), pixel.maxY <= Double(height - 3) else {
@@ -96,13 +96,13 @@ enum PDFNativeScanPatch {
         }
         guard format == .raw, nativeArray(dictionary, "Decode") == nil,
               let w = nativeNumber(dictionary, "Width"), let h = nativeNumber(dictionary, "Height"),
-              w >= 1, h >= 1, w <= 16_384, h <= 16_384,
+              w >= 1, h >= 1, w <= 32_768, h <= 32_768,
               let bits = nativeNumber(dictionary, "BitsPerComponent"), bits == 8 || (bits == 1 && colorSpace.numberOfComponents == 1) else {
             throw PDFNativeTextError.unsupported("The scan's raw pixel encoding is not supported by this editor.")
         }
         let width = Int(w), height = Int(h), depth = Int(bits), components = colorSpace.numberOfComponents
         let rowBytes = (width * components * depth + 7) / 8
-        guard width * height <= 40_000_000, CFDataGetLength(bytes) == rowBytes * height,
+        guard width * height <= 80_000_000, CFDataGetLength(bytes) == rowBytes * height,
               let provider = CGDataProvider(data: bytes), let image = CGImage(width: width, height: height, bitsPerComponent: depth,
                 bitsPerPixel: depth * components, bytesPerRow: rowBytes, space: colorSpace, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: provider,
                 decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { throw PDFNativeTextError.unsupported("The decoded scan pixels do not match the declared image dimensions.") }

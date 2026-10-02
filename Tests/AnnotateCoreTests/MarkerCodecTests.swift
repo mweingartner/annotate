@@ -121,7 +121,7 @@ struct MarkerCodecTests {
         let original = try Fixtures.marker(in: document)
         try MarkerCodec.apply(original, to: document)
         var replacement = original
-        replacement.note = String(repeating: "é", count: 270_000)
+        replacement.note = String(repeating: "é", count: 540_000)
         #expect(throws: (any Error).self) { try MarkerCodec.apply(replacement, to: document) }
         #expect(MarkerCodec.markers(in: document) == [original])
     }

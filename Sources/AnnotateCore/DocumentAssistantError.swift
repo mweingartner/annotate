@@ -20,7 +20,7 @@ public enum DocumentAssistantError: Error, LocalizedError, Equatable {
         case .noSelection: "Select a passage in the PDF first, then choose Explain selection or Translate selection."
         case .noQuestion: "Enter a question or words to find in the document."
         case .noMatches: "No passages matched those words. Try a distinctive name, phrase, or topic from the PDF."
-        case .documentTooLarge: "This document exceeds the assistant limit of 10,000 pages or 8 MB of extracted text. Extract a smaller page range first. No partial answer was generated."
+        case .documentTooLarge: "This document exceeds the assistant limit of 20,000 pages or 16 MB of extracted text. Extract a smaller page range first. No partial answer was generated."
         case .requestTooLong: "Use a question of at most 1,000 UTF-8 bytes or a selection of at most 4,000 UTF-8 bytes. No text was silently shortened."
         case .contextTooLarge: "This text exceeds the local model's context limit. Select a shorter passage or ask a more specific question. No partial answer was presented."
         case .reviewedForAnotherProvider: "This request was reviewed for a different AI provider or settings. Nothing was sent. Review it again before sending."

@@ -173,7 +173,8 @@ struct NativeHardeningDepthTests {
             HandPDF.helvetica, HandPDF.stream(content)] + Array(repeating: form, count: distinct ? count : 1))
     }
 
-    @Test("A legal page with many form instances still edits, up to the limit", arguments: [(1_500, false), (1_500, true), (2_000, false)])
+    @Test("A legal page with many form instances still edits, up to the limit",
+          arguments: [(1_500, false), (1_500, true), (PDFNativeTextProgram.Work.maximumForms, false)])
     func manyFormsEdit(count: Int, distinct: Bool) throws {
         let data = formsPage(count, distinct: distinct)
         var edited: PDFDocument?
@@ -209,15 +210,15 @@ struct NativeHardeningDepthTests {
 
     @Test("Forms nested inside forms count toward the same budget")
     func nestedFormsShareBudget() throws {
-        // Two outer forms each drawing an inner form 1,000 times: 2 + 2,000 instances.
+        // Two outer forms each drawing an inner form half the limit's times: 2 + the limit.
         let inner = HandPDF.stream("0 0 1 1 re f", "/Type /XObject /Subtype /Form /BBox [0 0 1 1]")
-        let outerBody = Array(repeating: "/In Do", count: 1_000).joined(separator: " ")
+        let outerBody = Array(repeating: "/In Do", count: PDFNativeTextProgram.Work.maximumForms / 2).joined(separator: " ")
         let outer = HandPDF.stream(outerBody, "/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources << /XObject << /In 7 0 R >> >>")
         let data = HandPDF.data([Self.catalog, Self.pages,
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /XObject << /Out 6 0 R >> >> /Contents 5 0 R >>",
             HandPDF.helvetica, HandPDF.stream("BT /F1 12 Tf 72 700 Td (Hello) Tj ET /Out Do /Out Do"), outer, inner])
         #expect(throws: PDFNativeTextError.self) { try program(data) }
-        // One outer form, 1,001 instances, is fine.
+        // One outer form, 1 + half the limit's instances, is fine.
         let one = HandPDF.data([Self.catalog, Self.pages,
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /XObject << /Out 6 0 R >> >> /Contents 5 0 R >>",
             HandPDF.helvetica, HandPDF.stream("BT /F1 12 Tf 72 700 Td (Hello) Tj ET /Out Do"), outer, inner])
@@ -289,14 +290,15 @@ struct NativeHardeningDepthTests {
             HandPDF.helvetica, HandPDF.stream(content)])
     }
 
-    @Test("A page of nearly the operator limit is read in reasonable time; one past is refused")
+    @Test("A page of exactly the operator limit is read in reasonable time; one past is refused")
     func operatorLimit() throws {
-        let filler = String(repeating: "0 g\n", count: 240_000)
+        // Five text operators plus the filler make exactly the limit.
+        let filler = String(repeating: "0 g\n", count: PDFNativeTextProgram.Work.maximumOperations - 5)
         var read: PDFNativeTextProgram?
         let time = try elapsed { read = try program(textPage("BT /F1 12 Tf 72 700 Td (Hello) Tj ET\n" + filler)) }
         #expect(read?.glyphs.count == 5)
         #expect(time < .seconds(15), "\(time)")
-        let over = textPage(String(repeating: "0 g\n", count: 250_001))
+        let over = textPage(String(repeating: "0 g\n", count: PDFNativeTextProgram.Work.maximumOperations + 1))
         let refused = elapsed { #expect(throws: PDFNativeTextError.self) { try program(over) } }
         #expect(refused < .seconds(15), "\(refused)")
     }

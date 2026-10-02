@@ -182,7 +182,7 @@ public enum PDFContentEditor {
         let rotated = abs(page.rotation % 180) == 90
         let size = rotated ? CGSize(width: box.height, height: box.width) : box.size
         let width = ceil(size.width * scale), height = ceil(size.height * scale)
-        guard width <= 16384, height <= 16384, width * height <= 40_000_000 else { throw PDFContentError.tooLarge }
+        guard width <= 32_768, height <= 32_768, width * height <= 80_000_000 else { throw PDFContentError.tooLarge }
         guard let context = CGContext(data: nil, width: Int(width), height: Int(height), bitsPerComponent: 8,
                                       bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw PDFContentError.renderingFailed }

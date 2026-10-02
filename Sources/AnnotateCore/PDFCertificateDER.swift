@@ -6,7 +6,7 @@ enum PDFCertificateDER {
     /// Inspect CMS structure before Security decodes it: a PDF detached
     /// signature must bind the supplied ByteRange, never an embedded payload.
     static func requireDetachedSignedData(_ data: Data) throws {
-        guard data.count <= 1_048_576 else { throw PDFCertificateError.invalidEnvelope }
+        guard data.count <= 2 * 1_048_576 else { throw PDFCertificateError.invalidEnvelope }
         let bytes = [UInt8](data)
         func elements(_ range: Range<Int>) throws -> [Element] { try PDFCertificateDER.elements(bytes, in: range) }
         let root = try elements(0..<bytes.count)
@@ -54,12 +54,12 @@ enum PDFCertificateDER {
     }
 
     static func encode(_ data: Data) throws -> Data {
-        guard !data.isEmpty, data.count <= 1_048_576 else { throw PDFCertificateError.invalidEnvelope }
+        guard !data.isEmpty, data.count <= 2 * 1_048_576 else { throw PDFCertificateError.invalidEnvelope }
         let bytes = [UInt8](data)
         var offset = 0, nodes = 0
         func value(limit: Int, depth: Int) throws -> Data {
             nodes += 1
-            guard depth < 64, nodes <= 10_000, offset + 2 <= limit else { throw PDFCertificateError.invalidEnvelope }
+            guard depth < 64, nodes <= 20_000, offset + 2 <= limit else { throw PDFCertificateError.invalidEnvelope }
             let start = offset, tag = bytes[offset]
             guard tag != 0 else { throw PDFCertificateError.invalidEnvelope }
             offset += 1

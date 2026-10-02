@@ -3,7 +3,7 @@ import Foundation
 /// Small ZIP writer for Open Packaging Convention documents. Entries are stored without compression;
 /// PDF page images are already encoded. No shell process, temporary file, or third-party library is used.
 enum PDFOfficeZIP {
-    static let maximumBytes = 256 * 1_024 * 1_024
+    static let maximumBytes = 512 * 1_024 * 1_024
     private static let crcTable: [UInt32] = (0..<256).map { value in
         var crc = UInt32(value)
         for _ in 0..<8 { crc = crc & 1 == 1 ? 0xEDB88320 ^ (crc >> 1) : crc >> 1 }

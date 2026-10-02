@@ -135,7 +135,7 @@ public enum PDFNativeImageEditor {
         var nodes = 0, bytes = 0
         func consume(bytes count: Int) throws {
             nodes += 1
-            guard nodes <= 100_000, count <= 256 * 1_024 * 1_024 - bytes else { throw PDFNativeImageError.unsupported("The image resources exceed the safe fingerprinting limit.") }
+            guard nodes <= 200_000, count <= 512 * 1_024 * 1_024 - bytes else { throw PDFNativeImageError.unsupported("The image resources exceed the safe fingerprinting limit.") }
             bytes += count
         }
     }
@@ -145,22 +145,22 @@ public enum PDFNativeImageEditor {
         let tokens = PDFNativeTokenBudget()
         func begin(bytes count: Int) throws {
             instances += 1
-            guard instances <= 2_000, count <= 128 * 1_024 * 1_024 - bytes else { throw PDFNativeImageError.unsupported("The page exceeds the safe image/form expansion limit.") }
+            guard instances <= 4_000, count <= 256 * 1_024 * 1_024 - bytes else { throw PDFNativeImageError.unsupported("The page exceeds the safe image/form expansion limit.") }
             bytes += count
         }
         func add(operations count: Int) throws {
             operations += count
-            guard operations <= 250_000 else { throw PDFNativeImageError.unsupported("The page exceeds the safe image operation limit.") }
+            guard operations <= 500_000 else { throw PDFNativeImageError.unsupported("The page exceeds the safe image operation limit.") }
         }
         func image() throws {
             images += 1
-            guard images <= 2_000 else { throw PDFNativeImageError.unsupported("The page exceeds the safe image count limit.") }
+            guard images <= 4_000 else { throw PDFNativeImageError.unsupported("The page exceeds the safe image count limit.") }
         }
     }
 
     private static func replacementStream(_ image: CGImage, graph: PDFNativeObjectGraph) throws -> PDFNativeValue {
         let width = image.width, height = image.height
-        guard width > 0, height > 0, width <= 16_384, height <= 16_384, width * height <= 40_000_000 else { throw PDFNativeImageError.invalidImage }
+        guard width > 0, height > 0, width <= 32_768, height <= 32_768, width * height <= 80_000_000 else { throw PDFNativeImageError.invalidImage }
         var rgba = [UInt8](repeating: 0, count: width * height * 4)
         let drawn = rgba.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
@@ -225,7 +225,7 @@ public enum PDFNativeImageEditor {
             var stream: CGPDFStreamRef?
             guard CGPDFArrayGetStream(array, index, &stream), let stream else { throw PDFNativeImageError.cannotWrite }
             result.append(try nativeDecodedStream(stream)); result.append(10)
-            guard result.count <= 128 * 1_024 * 1_024 else { throw PDFNativeImageError.unsupported("The page's content exceeds safe editing limits.") }
+            guard result.count <= 256 * 1_024 * 1_024 else { throw PDFNativeImageError.unsupported("The page's content exceeds safe editing limits.") }
         }
         return result
     }
@@ -261,7 +261,7 @@ public enum PDFNativeImageEditor {
 
         init(data: Data, resources: CGPDFDictionaryRef?, stream: CGPDFStreamRef? = nil, path: [Int] = [], budget: ProgramBudget = ProgramBudget(),
              transform: CGAffineTransform = .identity, customClip: Bool = false, formClips: [CGRect] = [], ancestors: Set<UInt> = []) throws {
-            guard path.count < 24, data.count <= 64 * 1_024 * 1_024 else { throw PDFNativeImageError.unsupported("The image content exceeds safe editing limits.") }
+            guard path.count < 24, data.count <= 128 * 1_024 * 1_024 else { throw PDFNativeImageError.unsupported("The image content exceeds safe editing limits.") }
             try budget.begin(bytes: data.count)
             self.data = data; self.resources = resources; self.stream = stream
             var lexer = PDFNativeLexer(data, budget: budget.tokens)

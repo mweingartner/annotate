@@ -3,8 +3,8 @@ import PDFKit
 
 /// A bounded, complete text snapshot. The budget applies to the entire PDF, never a prefix.
 public struct DocumentAssistantIndex: Sendable {
-    public static let maximumDocumentBytes = 8_000_000
-    public static let maximumPageCount = 10_000
+    public static let maximumDocumentBytes = 16_000_000
+    public static let maximumPageCount = 20_000
     public static let passageByteLimit = 1_400
     public static let contextByteLimit = 5_600
 

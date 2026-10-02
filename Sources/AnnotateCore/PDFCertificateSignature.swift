@@ -5,7 +5,7 @@ import Security
 
 @MainActor
 public enum PDFCertificateSignature {
-    public static let maximumPDFBytes = 256 * 1_024 * 1_024
+    public static let maximumPDFBytes = 512 * 1_024 * 1_024
     private static let reservedSignatureBytes = 32_768
 
     /// Produces final signed bytes. Never load and reserialize the result before saving it.

@@ -18,7 +18,7 @@ struct PDFNativeOperation {
 /// Tokens shared by everything read for one page (its content, every form it draws, and
 /// its fonts' maps), so drawing one form many times can't multiply a stream's own limit.
 final class PDFNativeTokenBudget {
-    static let pageLimit = 8_000_000
+    static let pageLimit = 16_000_000
     let limit: Int
     private(set) var used = 0
     init(limit: Int = PDFNativeTokenBudget.pageLimit) { self.limit = limit }
@@ -32,7 +32,7 @@ struct PDFNativeLexer {
     /// Tokens one stream may hold, and operands one operator may take. Every token is a
     /// separate allocation: a 64 MB stream of bare numbers would otherwise cost gigabytes
     /// before any other limit applies. Real operators take a few dozen operands at most.
-    static let maximumTokens = 4_000_000, maximumOperands = 4_096
+    static let maximumTokens = 8_000_000, maximumOperands = 8_192
     let bytes: [UInt8]
     var index = 0
     private var tokens = 0
@@ -153,7 +153,7 @@ struct PDFNativeLexer {
             if case .word(let name) = value, !["true", "false", "null"].contains(name) {
                 if name == "BI" { throw PDFNativeTextError.unsupported("This page uses inline images in its text content stream.") }
                 result.append(PDFNativeOperation(operands: operands, name: name, range: start..<index)); operands = []
-                guard result.count <= 250_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe content-operation limit.") }
+                guard result.count <= 500_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe content-operation limit.") }
             } else {
                 operands.append(value)
                 guard operands.count <= Self.maximumOperands else { throw PDFNativeTextError.unsupported("This page's content has an operator with too many operands.") }

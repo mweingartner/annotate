@@ -40,7 +40,7 @@ func nativeStreamExpansionIsBounded(_ stream: CGPDFStreamRef) -> Bool {
             return value
         }
         guard let width = integer(dictionary, "Width"), let height = integer(dictionary, "Height"),
-              (width - 1) / 8 + 1 <= 64 * 1_024 * 1_024 / height else { return false }
+              (width - 1) / 8 + 1 <= 128 * 1_024 * 1_024 / height else { return false }
         // A fax decoder sizes its output from its own parameters, not the image's: they
         // must agree with the stated size, and the rows must be stated, or the stream
         // could decode to gigabytes. The parameters must be shaped like the filters, so
@@ -81,7 +81,7 @@ func nativeDecodedStream(_ stream: CGPDFStreamRef) throws -> Data {
     guard nativeStreamExpansionIsBounded(stream) else { throw PDFNativeTextError.unsupported("A PDF stream is compressed more than once, which can't be decoded safely.") }
     var format = CGPDFDataFormat.raw
     guard let data = CGPDFStreamCopyData(stream, &format), format == .raw else { throw PDFNativeTextError.unsupported("The PDF text stream cannot be decoded by Core Graphics.") }
-    guard CFDataGetLength(data) <= 64 * 1024 * 1024 else { throw PDFNativeTextError.unsupported("A PDF text stream exceeds the safe editing limit.") }
+    guard CFDataGetLength(data) <= 128 * 1024 * 1024 else { throw PDFNativeTextError.unsupported("A PDF text stream exceeds the safe editing limit.") }
     return data as Data
 }
 
@@ -129,7 +129,7 @@ struct PDFNativeFont {
                 var assigned = 0
                 func assign(_ count: Int) throws {
                     assigned += count
-                    guard assigned <= 4 * 65_536 else { throw PDFNativeTextError.unsupported("The font's width table exceeds the safe editing limit.") }
+                    guard assigned <= 8 * 65_536 else { throw PDFNativeTextError.unsupported("The font's width table exceeds the safe editing limit.") }
                 }
                 var i = 0
                 while i < CGPDFArrayGetCount(values) {
@@ -252,13 +252,13 @@ struct PDFNativeFont {
     static func cmap(_ data: Data, tokens budget: PDFNativeTokenBudget? = nil) throws -> CMap {
         // Bound expansion work, including repeated/overlapping mappings. Limiting
         // each range alone permits a tiny CMap to perform billions of updates.
-        guard data.count <= 16 * 1024 * 1024 else { throw PDFNativeTextError.malformed("The font CMap is too large.") }
+        guard data.count <= 32 * 1024 * 1024 else { throw PDFNativeTextError.malformed("The font CMap is too large.") }
         var lexer = PDFNativeLexer(data, budget: budget), tokens: [PDFNativeToken] = []
         while let token = try lexer.next() {
-            guard tokens.count < 262_144 else { throw PDFNativeTextError.malformed("The font CMap has too many tokens.") }
+            guard tokens.count < 524_288 else { throw PDFNativeTextError.malformed("The font CMap has too many tokens.") }
             tokens.append(token)
         }
-        var remainingMappings = 131_072, remainingBytes = 8 * 1024 * 1024
+        var remainingMappings = 262_144, remainingBytes = 16 * 1024 * 1024
         func chargeMappings(_ count: Int) throws {
             guard count <= remainingMappings else { throw PDFNativeTextError.malformed("The font CMap exceeds the mapping limit.") }
             remainingMappings -= count

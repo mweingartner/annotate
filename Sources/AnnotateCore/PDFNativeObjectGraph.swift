@@ -43,9 +43,9 @@ final class PDFNativeObjectGraph {
     private(set) var rootID = 0
     private var info: PDFNativeValue?
 
-    private let maximumObjects = 100_000
-    private let maximumBytes = 512 * 1_024 * 1_024
-    private let maximumItems = 2_000_000
+    private let maximumObjects = 200_000
+    private let maximumBytes = 1_024 * 1_024 * 1_024
+    private let maximumItems = 4_000_000
 
     init(document: CGPDFDocument) throws {
         guard !document.isEncrypted else { throw PDFNativeGraphError.encrypted }
@@ -256,7 +256,8 @@ final class PDFNativeObjectGraph {
         }
         let xref = output.count
         output.append(Data("xref\n0 \(offsets.count)\n0000000000 65535 f \n".utf8))
-        for offset in offsets.dropFirst() { output.append(Data(String(format: "%010d 00000 n \n", offset).utf8)) }
+        // %ld: a Swift Int is 64 bits, and %d would read only 32 of them.
+        for offset in offsets.dropFirst() { output.append(Data(String(format: "%010ld 00000 n \n", offset).utf8)) }
         var trailer: [String: PDFNativeValue] = ["Size": .integer(offsets.count), "Root": .reference(rootID)]
         if let info { trailer["Info"] = info }
         output.append(Data("trailer\n".utf8))

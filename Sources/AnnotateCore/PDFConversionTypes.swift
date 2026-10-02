@@ -85,7 +85,7 @@ public enum PDFConversionError: LocalizedError {
         case .invalidPage: "A page has invalid dimensions or is too large to render safely."
         case .failed: "macOS could not complete this conversion. The original document has not been changed."
         case .outputDirectory: "Choose a writable output folder."
-        case .inputTooLarge: "This input exceeds the 512 MB conversion limit. Split it into smaller documents first."
+        case .inputTooLarge: "This input exceeds the 1 GB conversion limit. Split it into smaller documents first."
         case .permissionDenied: "The PDF's security permissions do not allow this conversion. Owner authorization is required."
         }
     }

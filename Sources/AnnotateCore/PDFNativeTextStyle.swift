@@ -27,7 +27,7 @@ public enum PDFNativeTextStyle {
         guard !document.isEncrypted else { throw PDFNativeTextError.unsupported("Source font inspection needs an unencrypted working copy.") }
         guard let page = document.page(at: region.pageIndex), MarkerCodec.finite(region.bounds),
               region.bounds.width >= 1, region.bounds.height >= 1, page.bounds(for: .cropBox).contains(region.bounds),
-              fallback.length > 0, fallback.length <= 1_000_000,
+              fallback.length > 0, fallback.length <= 2_000_000,
               let bytes = document.dataRepresentation(), let provider = CGDataProvider(data: bytes as CFData),
               let source = CGPDFDocument(provider), let dictionary = source.page(at: region.pageIndex + 1)?.dictionary else {
             throw PDFNativeTextError.invalidSelection

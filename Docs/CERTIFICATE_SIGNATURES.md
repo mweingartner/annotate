@@ -31,7 +31,7 @@ When the chain is trusted but the usage doesn't qualify, the result is **certifi
 
 ## Explicit limits
 
-- Maximum input/output PDF size: 256 MiB; CMS envelope: 1 MiB; field traversal: 10,000 nodes and 64 levels. Oversized certificate chains fail before output is saved. Signing reasons are limited to 2,000 UTF-8 bytes.
+- Maximum input/output PDF size: 512 MiB; CMS envelope: 2 MiB; field traversal: 20,000 nodes and 64 levels. Oversized certificate chains fail before output is saved. Signing reasons are limited to 2,000 UTF-8 bytes.
 - Signing rejects locked, restricted, encrypted, or already-signed documents. Full graph rewriting cannot preserve an earlier signature, so incremental co-signing is unavailable. Encryption is never removed automatically.
 - Validation supports `adbe.pkcs7.detached`. Other subfilters are identified as unsupported. Encrypted-file validation is unavailable.
 - This is an approval signature, without DocMDP change-policy certification, online revocation checking, RFC 3161 timestamps, PAdES archival profiles, or long-term validation. An intact signature proves byte integrity relative to its included certificate; trust and legal identity are separate questions.

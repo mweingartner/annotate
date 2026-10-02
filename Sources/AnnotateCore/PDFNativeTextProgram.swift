@@ -49,8 +49,8 @@ final class PDFNativeTextProgram {
     /// a crafted page can't make an edit run for minutes: forms drawn many times, deep
     /// nesting, many operators, large streams, or one font selected over and over.
     final class Work {
-        static let maximumForms = 2_000, maximumOperations = 250_000, maximumBytes = 128 * 1_024 * 1_024
-        static let maximumFonts = 1_000
+        static let maximumForms = 4_000, maximumOperations = 500_000, maximumBytes = 256 * 1_024 * 1_024
+        static let maximumFonts = 2_000
         private(set) var forms = 0, operations = 0, bytes = 0
         private var fonts: [UInt: PDFNativeFont] = [:]
         let tokens = PDFNativeTokenBudget()
@@ -220,7 +220,7 @@ final class PDFNativeTextProgram {
                                 origin: CGPoint(x: 0, y: state.rise).applying(pen), advance: advance * penScale,
                                 characterSpacing: state.characterSpace * state.horizontalScale * penScale, upright: upright)
                             pieces.append(.glyph(placement)); glyphs.append(placement); state.advance(advance)
-                            guard glyphs.count <= 250_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe glyph-editing limit.") }
+                            guard glyphs.count <= 500_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe glyph-editing limit.") }
                         }
                     } else { throw PDFNativeTextError.malformed("TJ contains an invalid element.") }
                 }
@@ -248,7 +248,7 @@ final class PDFNativeTextProgram {
                 }
                 forms[index] = nested; glyphs.append(contentsOf: nested.glyphs)
                 fontFlags.merge(nested.fontFlags) { current, _ in current }
-                guard glyphs.count <= 250_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe glyph-editing limit.") }
+                guard glyphs.count <= 500_000 else { throw PDFNativeTextError.unsupported("This page exceeds the safe glyph-editing limit.") }
             case "BDC":
                 if args.contains(where: { if case .dictionary(let value) = $0 { return value["ActualText"] != nil }; return false }) { markedActualText = true }
                 if let propertyName = args.last?.name, let resources, let properties = nativeDictionary(resources, "Properties"), let property = nativeDictionary(properties, propertyName) {

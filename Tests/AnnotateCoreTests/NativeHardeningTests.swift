@@ -69,6 +69,8 @@ struct NativeHardeningTests {
     func lexerBounded() {
         var operands = PDFNativeLexer(Data((String(repeating: "1 ", count: PDFNativeLexer.maximumOperands + 1) + "n").utf8))
         #expect(throws: PDFNativeTextError.self) { _ = try operands.operations() }
+        var mostOperands = PDFNativeLexer(Data((String(repeating: "1 ", count: PDFNativeLexer.maximumOperands) + "n").utf8))
+        #expect((try? mostOperands.operations())?.first?.operands.count == PDFNativeLexer.maximumOperands)
         var array = PDFNativeLexer(Data(("[" + String(repeating: "1 ", count: PDFNativeLexer.maximumTokens) + "] TJ").utf8))
         #expect(throws: PDFNativeTextError.self) { _ = try array.operations() }
         var ordinary = PDFNativeLexer(Data("BT /F1 12 Tf 72 700 Td [(A) -20 (B)] TJ ET".utf8))
@@ -77,9 +79,10 @@ struct NativeHardeningTests {
 
     @Test("A form drawn many times shares one token allowance: the page's, not one per drawing")
     func tokensSharedAcrossForms() throws {
-        // Each drawing of the form reads a million-token array; twelve drawings exceed the page's allowance.
+        // Each drawing of the form reads a million-token array, well under one stream's own
+        // limit; enough drawings to pass the page's allowance are refused.
         let array = "[" + String(repeating: "1 ", count: 1_000_000) + "] pop"
-        let drawings = String(repeating: "/Fm Do ", count: 12)
+        let drawings = String(repeating: "/Fm Do ", count: PDFNativeTokenBudget.pageLimit / 1_000_000 + 2)
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Fm 4 0 R >> >> /Contents 5 0 R >>",
             HandPDF.stream(array, "/Type /XObject /Subtype /Form /BBox [0 0 1 1]"), HandPDF.stream(drawings)])
@@ -154,9 +157,11 @@ struct NativeHardeningTests {
         #expect(time < .seconds(2), "\(time)")
     }
 
-    @Test("A composite font's overlapping width ranges are bounded in total")
-    func widthTableBounded() throws {
-        let ranges = Array(repeating: "0 65535 500", count: 6).joined(separator: " ")
+    /// PDFNativeFont: at most 8 × 65,536 width assignments, overlapping or not.
+    @Test("A composite font's overlapping width ranges are bounded in total: eight full ranges load, nine don't",
+          arguments: [(8, true), (9, false)])
+    func widthTableBounded(ranges count: Int, loads: Bool) throws {
+        let ranges = Array(repeating: "0 65535 500", count: count).joined(separator: " ")
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F2 4 0 R >> >> /Contents 5 0 R >>",
             "<< /Type /Font /Subtype /Type0 /BaseFont /Crafted /Encoding /Identity-H /DescendantFonts [6 0 R] >>",
@@ -167,7 +172,8 @@ struct NativeHardeningTests {
             let resources = try #require(PDFNativeTextEditor.inheritedResources(page))
             let fonts = try #require(nativeDictionary(resources, "Font"))
             let font = try #require(nativeDictionary(fonts, "F2"))
-            #expect(throws: PDFNativeTextError.self) { try PDFNativeFont(font) }
+            if loads { _ = try PDFNativeFont(font) }
+            else { #expect(throws: PDFNativeTextError.self) { try PDFNativeFont(font) } }
         }
     }
 
@@ -190,7 +196,10 @@ struct NativeHardeningTests {
                       ("/Filter /CCF /Width 2550 /Height 3300 /DecodeParms << /K -1 /Columns 0 /Rows 3300 >>", false),
                       // The largest integer a PDF can state must not overflow the size arithmetic.
                       ("/Filter /CCF /Width 9223372036854775807 /Height 1 /DecodeParms << /K -1 /Columns 9223372036854775807 /Rows 1 >>", false),
-                      ("/Filter [/FlateDecode /CCITTFaxDecode] /Width 2550 /Height 3300", false)])
+                      ("/Filter [/FlateDecode /CCITTFaxDecode] /Width 2550 /Height 3300", false),
+                      // A bitmap may decode to exactly 128 MiB (one bit a pixel), not a row or column more.
+                      ("/Filter /JBIG2Decode /Width 1073741824 /Height 1", true), ("/Filter /JBIG2Decode /Width 1073741825 /Height 1", false),
+                      ("/Filter /JBIG2Decode /Width 8 /Height 134217728", true), ("/Filter /JBIG2Decode /Width 8 /Height 134217729", false)])
     func chainedCompression(filter: String, bounded: Bool) throws {
         let data = HandPDF.data(["<< /Type /Catalog /Pages 2 0 R /Crafted 6 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>", HandPDF.helvetica, HandPDF.stream(""),

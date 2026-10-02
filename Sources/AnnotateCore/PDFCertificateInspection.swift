@@ -13,7 +13,7 @@ enum PDFCertificateInspection {
             result.append(Entry(name: name, dictionary: value))
         }
         func walk(_ field: CGPDFDictionaryRef, type: String?, name: String, depth: Int) throws {
-            guard depth < 64, visited.count < 10_000 else { throw PDFCertificateError.malformedSignature }
+            guard depth < 64, visited.count < 20_000 else { throw PDFCertificateError.malformedSignature }
             guard visited.insert(UInt(bitPattern: field.rawValue)).inserted else { return }
             let fieldType = nativeName(field, "FT") ?? type
             let component = text(field, key: "T") ?? ""
@@ -48,7 +48,7 @@ enum PDFCertificateInspection {
 
     static func signedContent(_ dictionary: CGPDFDictionaryRef, data: Data) throws -> (content: Data, envelope: Data, coversWholeFile: Bool) {
         guard let array = nativeArray(dictionary, "ByteRange"), CGPDFArrayGetCount(array) == 4,
-              let encoded = bytes(dictionary, key: "Contents"), encoded.count <= 1_048_576 else { throw PDFCertificateError.invalidByteRange }
+              let encoded = bytes(dictionary, key: "Contents"), encoded.count <= 2 * 1_048_576 else { throw PDFCertificateError.invalidByteRange }
         var range: [Int] = []
         for index in 0..<4 {
             var value = CGPDFInteger(0)

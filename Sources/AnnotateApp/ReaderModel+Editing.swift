@@ -411,7 +411,7 @@ extension PDFDocument {
     /// Every outline entry, walked without recursion and visiting each entry once, or nil
     /// for an outline too large to retarget on every keystroke (a crafted file can nest
     /// thousands of levels); such documents keep the whole-document path.
-    func outlineItems(limit: Int = 10_000) -> [PDFOutline]? {
+    func outlineItems(limit: Int = 20_000) -> [PDFOutline]? {
         guard let root = outlineRoot else { return [] }
         var items: [PDFOutline] = [], stack = [root], seen: Set<ObjectIdentifier> = []
         while let item = stack.popLast() {
