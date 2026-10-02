@@ -256,11 +256,16 @@ struct ReaderModelTests {
         return document
     }
 
+    /// Waits for the search under way to finish. Alone, a search of the four-page tour takes
+    /// about a quarter of a second (most of it the typing debounce); in a full run every app
+    /// suite shares the main actor and runs in parallel, which has stretched that past a
+    /// second. So the deadline only catches a search that never finishes, without measuring
+    /// what other tests were doing at the time; the results are what the callers check.
     private func waitForSearch(_ model: ReaderModel) async throws {
-        let deadline = ContinuousClock.now + .seconds(3)
+        let deadline = ContinuousClock.now + .seconds(30)
         while model.isSearching && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
-        #expect(!model.isSearching, "Search should finish within three seconds on the four-page tour.")
+        #expect(!model.isSearching, "Search should finish on the four-page tour.")
     }
 }
