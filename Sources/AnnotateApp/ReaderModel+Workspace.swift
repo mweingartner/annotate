@@ -44,18 +44,21 @@ extension ReaderModel {
             if working.isLocked { throw AnnotateError.lockedDocument }
             try operation(working)
             guard working.pageCount > 0 else { throw AnnotateError.emptyDocument }
-            replacePDF(working, actionName: name)
+            replacePDF(working, actionName: name, previousData: bytes)
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func replacePDF(_ document: PDFDocument, actionName: String) {
+    /// `previousData`: the current document's bytes when the caller already has them, as the
+    /// undo snapshot. Serializing a document after a page was moved or swapped can take
+    /// seconds, so it is done once, not twice.
+    func replacePDF(_ document: PDFDocument, actionName: String, previousData: Data? = nil) {
         guard document.pageCount > 0, !document.isLocked else {
             errorMessage = "The replacement PDF is locked or has no pages."
             return
         }
         if owner?.undoManager?.isUndoing == true || owner?.undoManager?.isRedoing == true { discardPendingLiveText() }
         else if !finishLiveText() { return }
-        if let previous = pdfDocument?.dataRepresentation() {
+        if let previous = previousData ?? pdfDocument?.dataRepresentation() {
             owner?.undoManager?.registerUndo(withTarget: self) { target in
                 target.restoreWorkspace(previous, actionName: actionName)
             }

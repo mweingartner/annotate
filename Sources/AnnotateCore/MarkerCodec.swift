@@ -71,6 +71,13 @@ public enum MarkerCodec {
     }
 
     public static func apply(_ marker: PDFMarker, to document: PDFDocument) throws {
+        try apply(marker, to: document, replacing: true)
+    }
+
+    /// `replacing: false` is for a marker whose annotations the caller has just removed
+    /// (see `remove(ids:from:)`): it skips the scan of every annotation in the document
+    /// for an old copy, which made restoring many markers quadratic.
+    static func apply(_ marker: PDFMarker, to document: PDFDocument, replacing: Bool) throws {
         guard !document.isLocked else { throw AnnotateError.lockedDocument }
         guard document.allowsCommenting else { throw AnnotateError.commentingNotAllowed }
         try validate(marker, in: document)
@@ -123,15 +130,20 @@ public enum MarkerCodec {
             prepared.append((page, comment.popup))
         }
         // Do not remove an existing marker until all validation and allocation succeeds.
-        remove(id: marker.id, from: document)
+        if replacing { remove(id: marker.id, from: document) }
         for (page, annotation) in prepared { page.addAnnotation(annotation) }
     }
 
     public static func remove(id: UUID, from document: PDFDocument) {
-        guard !document.isLocked, document.allowsCommenting else { return }
+        remove(ids: [id], from: document)
+    }
+
+    /// Removes every annotation of these markers in one pass over the document.
+    public static func remove(ids: Set<UUID>, from document: PDFDocument) {
+        guard !document.isLocked, document.allowsCommenting, !ids.isEmpty else { return }
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
-            let annotations = page.annotations.filter { owns($0, id: id) }
+            let annotations = page.annotations.filter { ownerID(of: $0).map(ids.contains) == true }
             // Detach in-memory popup links before removing their parent. Otherwise
             // PDFKit can reinsert a companion while serializing the removed parent.
             for annotation in annotations where annotation.type != "Popup" { annotation.popup = nil }
@@ -165,26 +177,33 @@ public enum MarkerCodec {
             let mine = annotations(of: marker.id, on: marker.pageIndex)
             let comments = mine.filter { $0.type == "Text" }
             let popups = mine.filter { $0.type == "Popup" }
-            // Prepare the replacement comment before removing legacy highlight contents.
-            guard let prepared = try? commentTag(for: marker, on: page) else { continue }
-            let popup = popups.first ?? prepared.popup
-            if comments.isEmpty {
-                prepared.tag.popup = popup
-                page.addAnnotation(prepared.tag)
+            // Only a missing comment or popup is created; one marker's annotations cost a
+            // fraction of a millisecond each, and this runs on load and after every edit.
+            guard let placement = try? commentPlacement(for: marker, on: page) else { continue }
+            var prepared: (tag: PDFAnnotation, popup: PDFAnnotation)?
+            if comments.isEmpty || popups.isEmpty {
+                guard let made = try? commentTag(for: marker, on: page) else { continue }
+                prepared = made
+            }
+            guard let popup = popups.first ?? prepared?.popup else { continue }
+            if comments.isEmpty, let tag = prepared?.tag {
+                tag.popup = popup
+                page.addAnnotation(tag)
             } else {
+                // Unchanged values aren't written: a write marks the annotation for saving.
                 for comment in comments {
-                    comment.bounds = prepared.tag.bounds
-                    comment.color = prepared.tag.color
-                    comment.popup = popup
+                    if !sameBounds(comment.bounds, placement.bounds) { comment.bounds = placement.bounds }
+                    if !sameColor(comment.color, placement.color) { comment.color = placement.color }
+                    if comment.popup !== popup { comment.popup = popup }
                 }
             }
             if popups.isEmpty { page.addAnnotation(popup) }
             for badge in mine where badge.type == "FreeText" {
-                badge.fontColor = marker.color.readableInkColor
-                badge.color = marker.color.nsColor
+                if !sameColor(badge.fontColor, marker.color.readableInkColor) { badge.fontColor = marker.color.readableInkColor }
+                if !sameColor(badge.color, marker.color.nsColor) { badge.color = marker.color.nsColor }
             }
             for pageIndex in Set(marker.regions.map(\.pageIndex)) {
-                for highlight in annotations(of: marker.id, on: pageIndex) where highlight.type == "Highlight" {
+                for highlight in annotations(of: marker.id, on: pageIndex) where highlight.type == "Highlight" && highlight.contents != nil {
                     highlight.contents = nil
                 }
             }
@@ -250,7 +269,8 @@ public enum MarkerCodec {
         }
     }
 
-    private static func commentTag(for marker: PDFMarker, on page: PDFPage) throws -> (tag: PDFAnnotation, popup: PDFAnnotation) {
+    /// Where a marker's comment icon sits, beside the start of its passage, and its tint.
+    private static func commentPlacement(for marker: PDFMarker, on page: PDFPage) throws -> (bounds: CGRect, color: NSColor) {
         guard let first = marker.regions.first else { throw AnnotateError.invalidMarker("choose a location.") }
         let transform = page.transform(for: .cropBox)
         let crop = page.bounds(for: .cropBox).applying(transform)
@@ -261,14 +281,20 @@ public enum MarkerCodec {
         let x = min(max(crop.minX, passage.maxX + 3), crop.maxX - size)
         let y = min(max(crop.minY, passage.maxY + 3), crop.maxY - size)
         let bounds = CGRect(x: x, y: y, width: size, height: size).applying(transform.inverted())
+        // PDFKit draws the standard comment glyph in dark ink. A pale category tint
+        // keeps that glyph readable even when the marker itself uses a dark color.
+        let color = NSColor(srgbRed: 0.75 + marker.color.red * 0.25,
+                            green: 0.75 + marker.color.green * 0.25,
+                            blue: 0.75 + marker.color.blue * 0.25, alpha: 1)
+        return (bounds, color)
+    }
+
+    private static func commentTag(for marker: PDFMarker, on page: PDFPage) throws -> (tag: PDFAnnotation, popup: PDFAnnotation) {
+        let (bounds, color) = try commentPlacement(for: marker, on: page)
         let tag = makeAnnotation(bounds, .text)
         tag.iconType = .comment
         tag.contents = readableContents(for: marker)
-        // PDFKit draws the standard comment glyph in dark ink. A pale category tint
-        // keeps that glyph readable even when the marker itself uses a dark color.
-        tag.color = NSColor(srgbRed: 0.75 + marker.color.red * 0.25,
-                            green: 0.75 + marker.color.green * 0.25,
-                            blue: 0.75 + marker.color.blue * 0.25, alpha: 1)
+        tag.color = color
         tag.shouldDisplay = true
         tag.shouldPrint = true
         tag.userName = "Annotate"
@@ -284,9 +310,22 @@ public enum MarkerCodec {
         return (tag, popup)
     }
 
-    private static func owns(_ annotation: PDFAnnotation, id: UUID) -> Bool {
-        annotation.value(forAnnotationKey: ownerKey) as? String == ownerValue &&
-        (annotation.value(forAnnotationKey: identifierKey) as? String).flatMap(UUID.init(uuidString:)) == id
+    /// Equal to within what a saved PDF keeps: colors to a 255th of a channel, sizes to a
+    /// hundredth of a point.
+    private static func sameColor(_ lhs: NSColor?, _ rhs: NSColor) -> Bool {
+        guard let lhs = lhs?.usingColorSpace(.sRGB), let rhs = rhs.usingColorSpace(.sRGB) else { return false }
+        return abs(lhs.redComponent - rhs.redComponent) < 0.5 / 255 && abs(lhs.greenComponent - rhs.greenComponent) < 0.5 / 255
+            && abs(lhs.blueComponent - rhs.blueComponent) < 0.5 / 255 && abs(lhs.alphaComponent - rhs.alphaComponent) < 0.5 / 255
+    }
+
+    private static func sameBounds(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.minX - rhs.minX) < 0.01 && abs(lhs.minY - rhs.minY) < 0.01 && abs(lhs.width - rhs.width) < 0.01 && abs(lhs.height - rhs.height) < 0.01
+    }
+
+    /// The marker an annotation belongs to, if Annotate made it.
+    private static func ownerID(of annotation: PDFAnnotation) -> UUID? {
+        guard annotation.value(forAnnotationKey: ownerKey) as? String == ownerValue else { return nil }
+        return (annotation.value(forAnnotationKey: identifierKey) as? String).flatMap(UUID.init(uuidString:))
     }
 
     static func finite(_ rect: CGRect) -> Bool {

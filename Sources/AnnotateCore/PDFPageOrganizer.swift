@@ -74,7 +74,6 @@ public enum PDFPageOrganizer {
         let count = copy.pageCount
         let pages = (0..<count).compactMap { copy.page(at: $0) }
         guard pages.count == count else { throw PDFPageOperationError.invalidOrder }
-        removeMarkers(existing, from: document)
         let originalCount = document.pageCount
         for (offset, page) in pages.enumerated() {
             guard let duplicated = page.copy() as? PDFPage else { throw AnnotateError.exportFailed }
@@ -88,6 +87,11 @@ public enum PDFPageOrganizer {
                 duplicated.annotations[index].fieldName = name
             }
         }
+        // After the pages are in, so it also clears marker annotations that came with them: a
+        // source that forbids commenting keeps its markers' annotations (the removal from
+        // the copy above can't touch them). The incoming markers' original identifiers, since
+        // a renamed marker's leftovers still carry the identifier it arrived with.
+        MarkerCodec.remove(ids: Set(existing.map(\.id)).union(oldIncoming.map(\.id)), from: document)
         let oldMapping = Dictionary(uniqueKeysWithValues: (0..<originalCount).map { ($0, $0 < insertion ? $0 : $0 + count) })
         let newMapping = Dictionary(uniqueKeysWithValues: (0..<count).map { ($0, insertion + $0) })
         try restore(existing, mapping: oldMapping, to: document)
@@ -129,7 +133,14 @@ public enum PDFPageOrganizer {
             throw PDFPageOperationError.sourceRestricted
         }
         try validate(pages, in: document)
-        guard let data = document.dataRepresentation(), let copy = PDFDocument(data: data) else { throw AnnotateError.exportFailed }
+        guard let data = document.dataRepresentation() else { throw AnnotateError.exportFailed }
+        return try extract(pages, from: data)
+    }
+
+    /// A part made from the document's bytes, which split shares across every part instead of
+    /// serializing the document once per part.
+    private static func extract(_ pages: IndexSet, from data: Data) throws -> PDFDocument {
+        guard let copy = PDFDocument(data: data) else { throw AnnotateError.exportFailed }
         let removed = IndexSet((0..<copy.pageCount).filter { !pages.contains($0) })
         if !removed.isEmpty { try delete(copy, pages: removed) }
         return copy
@@ -138,8 +149,12 @@ public enum PDFPageOrganizer {
     public static func split(_ document: PDFDocument, every count: Int) throws -> [PDFDocument] {
         guard count > 0 else { throw PDFPageOperationError.invalidOrder }
         guard document.pageCount > 0 else { throw AnnotateError.emptyDocument }
+        guard !document.isLocked, document.allowsCopying, document.allowsDocumentAssembly else {
+            throw PDFPageOperationError.sourceRestricted
+        }
+        guard let data = document.dataRepresentation() else { throw AnnotateError.exportFailed }
         return try stride(from: 0, to: document.pageCount, by: count).map { start in
-            try extract(document, pages: IndexSet(integersIn: start..<min(document.pageCount, start + count)))
+            try extract(IndexSet(integersIn: start..<min(document.pageCount, start + count)), from: data)
         }
     }
 
@@ -158,10 +173,14 @@ public enum PDFPageOrganizer {
     }
 
     private static func removeMarkers(_ markers: [PDFMarker], from document: PDFDocument) {
-        for marker in markers { MarkerCodec.remove(id: marker.id, from: document) }
+        MarkerCodec.remove(ids: Set(markers.map(\.id)), from: document)
     }
 
+    /// Re-applies markers removed by `removeMarkers`, with their pages renumbered. Their old
+    /// annotations are already gone, so each is added without another scan of the document;
+    /// an identifier seen twice still replaces its earlier copy.
     private static func restore(_ markers: [PDFMarker], mapping: [Int: Int], to document: PDFDocument) throws {
+        var applied = Set<UUID>()
         for var marker in markers {
             marker.regions = marker.regions.compactMap { region in
                 guard let page = mapping[region.pageIndex] else { return nil }
@@ -169,7 +188,7 @@ public enum PDFPageOrganizer {
             }.enumerated().sorted { lhs, rhs in
                 lhs.element.pageIndex == rhs.element.pageIndex ? lhs.offset < rhs.offset : lhs.element.pageIndex < rhs.element.pageIndex
             }.map(\.element)
-            if !marker.regions.isEmpty { try MarkerCodec.apply(marker, to: document) }
+            if !marker.regions.isEmpty { try MarkerCodec.apply(marker, to: document, replacing: !applied.insert(marker.id).inserted) }
         }
     }
 

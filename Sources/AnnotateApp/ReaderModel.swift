@@ -237,6 +237,16 @@ final class ReaderModel {
         searchTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(220)) } catch { return }
             guard let self else { return }
+            // Hits are shown in batches about ten times a second. Adding each one as it was
+            // found redrew the whole results list every time: quadratic in the hit count,
+            // over a minute for a common word in a long document.
+            var found: [SearchHit] = [], shown = ContinuousClock.now
+            @MainActor func show(force: Bool = false) {
+                guard !found.isEmpty, force || shown.duration(to: .now) >= .milliseconds(100) else { return }
+                self.searchResults.append(contentsOf: found)
+                found.removeAll(keepingCapacity: true)
+                shown = .now
+            }
             for pageIndex in 0..<document.pageCount {
                 guard !Task.isCancelled else { return }
                 if let page = document.page(at: pageIndex), let text = page.string {
@@ -253,7 +263,7 @@ final class ReaderModel {
                             if let range = snippet.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) {
                                 snippet[range].font = .body.bold()
                             }
-                            self.searchResults.append(SearchHit(pageIndex: pageIndex, snippet: snippet, selection: selection))
+                            found.append(SearchHit(pageIndex: pageIndex, snippet: snippet, selection: selection))
                         }
                         cursor = NSMaxRange(match)
                         if cursor % 20 == 0 { await Task.yield() }
@@ -269,12 +279,14 @@ final class ReaderModel {
                         let range = text.rangeOfComposedCharacterSequences(for: NSRange(location: start, length: end - start))
                         var snippet = AttributedString((start > 0 ? "…" : "") + text.substring(with: range) + (end < text.length ? "…" : ""))
                         if let match = snippet.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) { snippet[match].font = .body.bold() }
-                        searchResults.append(SearchHit(pageIndex: pageIndex, snippet: snippet, bounds: addition.bounds))
+                        found.append(SearchHit(pageIndex: pageIndex, snippet: snippet, bounds: addition.bounds))
                     }
                 }
+                show()
                 await Task.yield()
                 guard !Task.isCancelled else { return }
             }
+            show(force: true)
             self.isSearching = false
         }
     }
