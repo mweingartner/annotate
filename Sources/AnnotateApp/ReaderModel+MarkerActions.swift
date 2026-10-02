@@ -33,9 +33,11 @@ extension ReaderModel {
 }
 
 extension ReaderModel {
-    /// Return to reading. A pending text edit that could not be applied keeps the tool open.
+    /// Return to reading. Like Escape, closing ends a text edit even when its text could
+    /// not be applied, dropping only that text.
     func closeActiveTool() {
-        guard finishLiveText() else { return }
+        endLiveTextEditing()
+        guard liveEdit == nil else { return }
         activeTool = nil
         selectingToolArea = false
     }

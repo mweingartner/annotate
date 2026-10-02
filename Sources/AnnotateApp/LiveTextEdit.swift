@@ -77,6 +77,12 @@ final class LiveTextEdit {
     }
     @ObservationIgnored private var isSettling = false
     @ObservationIgnored var needsUndoCheckpoint = false
+    /// While the text can't be applied, the undo step that drops it (see
+    /// `ReaderModel.offerUndoForPendingText`).
+    @ObservationIgnored var pendingTextUndo: AnyObject?
+    /// Set while Escape or Close ends the edit: a last update that fails is discarded at
+    /// once, so it gets no undo step of its own.
+    @ObservationIgnored var isEnding = false
     @ObservationIgnored var changed: () -> Void = {}
     @ObservationIgnored var selectionChanged: () -> Void = {}
     @ObservationIgnored var nativeSource: PDFDocument?

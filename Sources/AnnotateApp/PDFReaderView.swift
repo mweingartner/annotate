@@ -57,6 +57,8 @@ struct PDFReaderView: NSViewRepresentable {
         NotificationCenter.default.removeObserver(view)
         view.selectionTask?.cancel()
         view.closeAnnotationPopover()
+        // Also removes the Escape monitor, which would otherwise outlive the window.
+        view.removeLiveEditor()
         if view.model?.pdfView === view { view.model?.pdfView = nil }
     }
 }
@@ -88,6 +90,9 @@ final class SelectionPDFView: PDFView {
     private var trackingMarkerClick = false
     var liveTextView: NSTextView?
     var liveTextDelegate: LiveTextDelegate?
+    /// Escape anywhere in this window ends the text edit, whatever has focus: the text
+    /// on the page, a field in the inspector, or nothing at all.
+    private var escapeMonitor: Any?
     /// The glass formatting bar that floats beside the text being edited.
     private var formatBar: NSHostingView<LiveTextFormatBar>?
     /// Strong reference: PDFView holds its overlay provider weakly.
@@ -342,6 +347,7 @@ final class SelectionPDFView: PDFView {
             field.delegate = delegate
             liveTextDelegate = delegate
             liveTextView = field
+            watchForEscape()
         }
         if field.superview !== host { field.removeFromSuperview(); host.addSubview(field) }
         // Match the PDF page's coordinate basis, including /Rotate and a nonzero crop origin.
@@ -376,7 +382,24 @@ final class SelectionPDFView: PDFView {
         showFormatBar(for: edit)
     }
 
+    private func watchForEscape() {
+        guard escapeMonitor == nil else { return }
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.keyCode == 53, event.window === self.window, let window = self.window,
+                  // Fn and Caps Lock don't change what Escape means.
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.function, .capsLock]).isEmpty,
+                  window.attachedSheet == nil, self.model?.liveEdit != nil else { return event }
+            // Escape first cancels an input method's composition.
+            if let text = window.firstResponder as? NSTextView, text.hasMarkedText() { return event }
+            // Ending removes the editor and this monitor; do it after the key event.
+            Task { @MainActor [weak self] in self?.model?.endLiveTextEditing() }
+            return nil
+        }
+    }
+
     func removeLiveEditor() {
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+        escapeMonitor = nil
         liveTextView?.delegate = nil
         liveTextView?.removeFromSuperview()
         liveTextView = nil

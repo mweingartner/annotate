@@ -208,6 +208,7 @@ extension ReaderModel {
                 edit.needsUndoCheckpoint = false
             }
             edit.nativeUpdateFailed = false
+            withdrawUndoForPendingText(of: edit)
             edit.lastReflow = moved
             if let message = edit.nativeFailureMessage, errorMessage?.hasPrefix(message) == true { errorMessage = nil }
             if edit.geometryIsValid, errorMessage?.hasPrefix("Keep the text block inside") == true { errorMessage = nil }
@@ -249,6 +250,7 @@ extension ReaderModel {
         } catch {
             if case PDFNativeTextError.scannedText = error { edit.canEditScannedText = true }
             edit.nativeUpdateFailed = true
+            offerUndoForPendingText(of: edit)
             // Text that needs room the content below can't give says why.
             if error as? PDFNativeTextError == .replacementDoesNotFit, let reason = edit.reflowRefusal {
                 edit.nativeFailureMessage = reason
@@ -258,7 +260,7 @@ extension ReaderModel {
             // Text that doesn't fit shows on the page (an overflow mark on the block) and in
             // the inspector; other failures also need the banner.
             if error as? PDFNativeTextError != .replacementDoesNotFit {
-                errorMessage = error.localizedDescription + " Your pending text remains in the editor; it has not been saved over the PDF."
+                errorMessage = error.localizedDescription + " Your pending text remains in the editor; it has not been saved over the PDF. Press Escape or Undo to discard it."
             }
             pdfView?.refreshLiveEditor()
         }
@@ -346,18 +348,61 @@ extension ReaderModel {
         replacePDF(restored, actionName: "Edit Text")
     }
 
+    /// Done, and clicking elsewhere: closes the editor, keeping the text on the page. Text
+    /// that could not be applied keeps the editor open, so it isn't lost by a stray click.
     @discardableResult
     func finishLiveText() -> Bool {
         guard liveEdit?.nativeUpdateFailed != true else {
             errorMessage = (liveEdit?.nativeFailureMessage ?? "The text could not be applied.")
-                + " Resize or correct the text, or discard the pending edit before closing the editor."
+                + " Resize or correct the text, or press Escape to discard it."
             return false
         }
         discardPendingLiveText()
         return true
     }
 
+    /// Escape, and closing the Edit inspector: always ends the edit. Text already applied
+    /// stays on the page (Undo takes it back); text that could not be applied is dropped,
+    /// so an edit that fails never traps anyone in the editor.
+    func endLiveTextEditing() {
+        guard let edit = liveEdit else { return }
+        edit.isEnding = true
+        defer { edit.isEnding = false }
+        if !edit.nativeUpdateFailed { edit.normalizeFontSize() }
+        if liveEdit?.nativeUpdateFailed == true {
+            discardPendingLiveText()
+            statusMessage = "Discarded the text that couldn’t be applied"
+        } else {
+            finishLiveText()
+        }
+    }
+
+    /// While the text can't be applied, Undo drops it: the first Undo returns the page to
+    /// the last text that was applied, and the next undoes the edit itself.
+    private func offerUndoForPendingText(of edit: LiveTextEdit) {
+        guard edit.pendingTextUndo == nil, !edit.isEnding, let undo = owner?.undoManager, !undo.isUndoing, !undo.isRedoing else { return }
+        let step = NSObject()
+        undo.registerUndo(withTarget: step) { [weak self, weak edit] _ in
+            guard let self, let edit, self.liveEdit === edit else { return }
+            self.discardPendingLiveText()
+            self.statusMessage = "Discarded the text that couldn’t be applied"
+        }
+        undo.setActionName("Typing")
+        edit.pendingTextUndo = step
+    }
+
+    /// Takes the step back once the text applies or the edit ends another way, leaving the
+    /// document's edited state as it was before the step was offered.
+    private func withdrawUndoForPendingText(of edit: LiveTextEdit) {
+        guard let step = edit.pendingTextUndo else { return }
+        edit.pendingTextUndo = nil
+        guard let undo = owner?.undoManager, !undo.isUndoing, !undo.isRedoing else { return }
+        undo.removeAllActions(withTarget: step)
+        owner?.updateChangeCount(.changeUndone)
+    }
+
     func discardPendingLiveText() {
+        if let edit = liveEdit { withdrawUndoForPendingText(of: edit) }
         // The text block's area was only the edit's own outline; don't leave it behind.
         if let edit = liveEdit, toolSelection == PageRegion(pageIndex: edit.pageIndex, bounds: edit.appliedBounds) {
             toolSelection = nil
